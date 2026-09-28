@@ -1,0 +1,31 @@
+# Burst inference: stay idle so the bucket fills, then overload it.
+# Local demo:  lt demo-server --rate 200 --burst 400
+# Expect: inferred burst b ~= 400, refill ~= 200/s, classification token-bucket.
+# Against a real API scale rates up (offered >> refill so the bucket drains in < 1 s).
+version: 1
+name: burst-test
+base_url: http://127.0.0.1:8080
+safety:
+  allowlist: [127.0.0.1, localhost]
+  max_rps_cap: 3000
+model:
+  type: open
+  workers: 4
+  processes: 2
+  profile:
+    - { duration: 2s, rate: 0, name: idle }
+    - { duration: 10s, rate: 1000, name: burst }
+http:
+  max_connections: 64
+  concurrency: 512
+  # Pre-open connections on an unlimited path so connection setup does not waste tokens.
+  warmup_requests: 64
+  warmup_path: /healthz
+routes:
+  - name: items
+    path: /api/items
+    expect_status: [200, 429]
+analysis:
+  expected_limit_rps: 200
+  expected_burst: 400
+  burst_tolerance: 0.10

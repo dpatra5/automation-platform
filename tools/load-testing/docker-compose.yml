@@ -1,0 +1,29 @@
+# Production-style stack: nginx serves the SPA and proxies /api to the backend.
+#   LT_API_TOKEN=$(openssl rand -hex 32) docker compose up --build
+#   open http://localhost:8080
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      LT_API_TOKEN: ${LT_API_TOKEN:?set LT_API_TOKEN to a long random secret}
+      LT_API_ALLOWED_HOSTS: ${LT_API_ALLOWED_HOSTS:-127.0.0.1,localhost}
+      LT_API_MAX_RPS_CAP: ${LT_API_MAX_RPS_CAP:-10000}
+    volumes:
+      - runs:/data/runs
+    expose:
+      - "8000"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      LT_API_UPSTREAM: http://backend:8000
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  runs:

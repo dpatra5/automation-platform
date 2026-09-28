@@ -34,6 +34,9 @@ htmlcov/
 *.db
 *.db-*
 tools/ui-automation/backend/artifacts/
+tools/load-testing/backend/runs/
+tools/load-testing/runs/
+tools/api-testing/backend/data/
 .env
 .env.*
 

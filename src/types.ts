@@ -19,7 +19,7 @@ export const MENU_ITEMS: MenuItem[] = [
   {
     key: 'api-testing',
     label: 'API Testing',
-    description: 'Run automated API test suites against your service endpoints.',
+    description: 'Build API test collections with assertions, chaining, data-driven runs and CI reports.',
     icon: '🔌',
   },
   {
