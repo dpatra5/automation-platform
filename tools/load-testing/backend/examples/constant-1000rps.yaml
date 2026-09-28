@@ -1,0 +1,35 @@
+# Sustained capacity check: offer 1000 RPS against a limiter expected to allow 800 RPS.
+# Local demo:  lt demo-server --rate 800 --burst 100
+version: 1
+name: constant-1000rps
+base_url: http://127.0.0.1:8080
+default_headers:
+  Accept: application/json
+safety:
+  allowlist: [127.0.0.1, localhost]
+  max_rps_cap: 2000
+  require_allowlist: true
+model:
+  type: open
+  workers: 4
+  # 2 processes leave headroom on laptops (httpx is CPU-bound, ~1-2k RPS per process).
+  processes: 2
+  profile:
+    - { duration: 30s, rate: 1000 }
+http:
+  http2: true
+  max_connections: 64
+  max_streams: 100
+  concurrency: 512
+  connect_timeout: 5s
+  read_timeout: 10s
+  warmup_requests: 32
+  warmup_path: /healthz
+routes:
+  - name: items
+    method: GET
+    path: /api/items
+    expect_status: [200, 429]
+analysis:
+  expected_limit_rps: 800
+  tolerance: 0.05

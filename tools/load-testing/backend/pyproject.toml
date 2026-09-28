@@ -1,0 +1,114 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lt-python"
+version = "0.1.0"
+description = "Open-model HTTP load generator and API rate-limit verifier"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+authors = [{ name = "lt-python contributors" }]
+keywords = ["load-testing", "rate-limiting", "http", "benchmark", "asyncio"]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+  "Topic :: Software Development :: Testing :: Traffic Generation",
+  "Typing :: Typed",
+]
+dependencies = [
+  "click==8.1.7",
+  "httpx[http2]==0.27.2",
+  "truststore==0.10.4",
+  "pydantic==2.9.2",
+  "PyYAML==6.0.2",
+  "hdrhistogram==0.10.3",
+  "fastapi==0.115.0",
+  "uvicorn==0.30.6",
+  "httptools==0.6.1",
+  "uvloop==0.20.0; sys_platform != 'win32'",
+  "playwright==1.63.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff==0.6.9",
+  "black==24.8.0",
+  "mypy==1.11.2",
+  "pytest==8.3.3",
+  "pytest-asyncio==0.24.0",
+  "pytest-cov==5.0.0",
+  "coverage[toml]==7.6.1",
+  "types-PyYAML==6.0.12.20240917",
+  "pre-commit==3.8.0",
+]
+
+[project.scripts]
+lt = "lt.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lt"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "ASYNC", "S"]
+ignore = [
+  "S101", # assert is fine in tests
+  "S311", # non-crypto RNG is intended (deterministic route selection / sampling)
+  "S104", # binding is explicit via --host
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B011"]
+"tools/**" = ["S"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "$MYPY_CONFIG_FILE_DIR/src"
+plugins = ["pydantic.mypy"]
+files = ["$MYPY_CONFIG_FILE_DIR/src/lt"]
+
+[[tool.mypy.overrides]]
+module = ["hdrh.*", "uvloop.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "integration: end-to-end tests against the local demo server",
+  "slow: long-running tests",
+]
+
+[tool.coverage.run]
+source = ["lt"]
+branch = true
+concurrency = ["thread", "multiprocessing"]
+parallel = true
+sigterm = true
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_covered = true
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+]

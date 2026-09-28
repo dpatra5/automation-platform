@@ -1,58 +1,23 @@
-import { useState } from 'react'
-import { useJobRunner } from '../hooks/useJobRunner'
-import { JobStatusPanel } from '../components/JobStatusPanel'
+import { useEffect } from 'react'
 
-const STEPS = [
-  'Connecting to API testing tool',
-  'Loading test collection',
-  'Executing requests',
-  'Validating responses',
-  'Compiling report',
-]
+const API_TESTING_APP_URL = import.meta.env.VITE_API_TESTING_APP_URL ?? 'http://localhost:5176'
 
 export function ApiTestingPage() {
-  const [endpoint, setEndpoint] = useState('')
-  const { status, logs, run } = useJobRunner({ steps: STEPS })
-
-  const canRun = endpoint.trim().length > 0 && status !== 'queued' && status !== 'running'
+  useEffect(() => {
+    window.open(API_TESTING_APP_URL, '_blank', 'noopener,noreferrer')
+  }, [])
 
   return (
     <div className="page">
       <h1>API Testing</h1>
       <p className="page-description">
-        Provide the base API endpoint or collection name. The integrated API testing tool will run
-        the automated test suite and report the results here.
+        The API Testing tool opened in a new tab. Build request collections, add assertions and
+        chained variables, import from cURL, OpenAPI or Postman, and run data-driven suites with
+        JUnit/HTML reports.
       </p>
-
-      <label className="field-label" htmlFor="api-endpoint">
-        API endpoint / collection
-      </label>
-      <input
-        id="api-endpoint"
-        className="text-input"
-        type="text"
-        placeholder="https://api.example.com or collection name"
-        value={endpoint}
-        onChange={(e) => setEndpoint(e.target.value)}
-      />
-
-      <button type="button" className="run-btn" disabled={!canRun} onClick={run}>
-        Run API Tests
-      </button>
-
-      <JobStatusPanel status={status} logs={logs}>
-        <div className="result-grid">
-          <div className="result-card">
-            <h3>Test Summary</h3>
-            <ul>
-              <li>Total requests: 42</li>
-              <li>Passed: 39</li>
-              <li>Failed: 3</li>
-              <li>Avg response time: 128ms</li>
-            </ul>
-          </div>
-        </div>
-      </JobStatusPanel>
+      <a className="run-btn" href={API_TESTING_APP_URL} target="_blank" rel="noreferrer">
+        Open API Testing Tool
+      </a>
     </div>
   )
 }
