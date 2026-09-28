@@ -1,58 +1,25 @@
-import { useState } from 'react'
-import { useJobRunner } from '../hooks/useJobRunner'
-import { JobStatusPanel } from '../components/JobStatusPanel'
+import { useEffect } from 'react'
 
-const STEPS = [
-  'Connecting to UI automation tool',
-  'Launching browser session',
-  'Executing test scenarios',
-  'Capturing screenshots',
-  'Compiling report',
-]
+const REWIND_APP_URL = import.meta.env.VITE_REWIND_APP_URL ?? 'http://localhost:5174'
 
 export function UiAutomationPage() {
-  const [suiteName, setSuiteName] = useState('')
-  const { status, logs, run } = useJobRunner({ steps: STEPS })
-
-  const canRun = suiteName.trim().length > 0 && status !== 'queued' && status !== 'running'
+  // The Rewind extension only answers the page's top frame, so embedding the
+  // tool in an iframe here means it can never detect the extension. Opening
+  // it in its own tab makes it the top frame, where recording works.
+  useEffect(() => {
+    window.open(REWIND_APP_URL, '_blank', 'noopener,noreferrer')
+  }, [])
 
   return (
     <div className="page">
       <h1>UI Automation</h1>
       <p className="page-description">
-        Provide the test suite name. The integrated UI automation tool will run the scenarios across
-        browsers and report the results here.
+        The Rewind UI automation tool opened in a new tab. It needs to be its own top-level
+        tab (not embedded) for the recording extension to work correctly.
       </p>
-
-      <label className="field-label" htmlFor="suite-name">
-        Test suite
-      </label>
-      <input
-        id="suite-name"
-        className="text-input"
-        type="text"
-        placeholder="Regression suite name"
-        value={suiteName}
-        onChange={(e) => setSuiteName(e.target.value)}
-      />
-
-      <button type="button" className="run-btn" disabled={!canRun} onClick={run}>
-        Run UI Automation
-      </button>
-
-      <JobStatusPanel status={status} logs={logs}>
-        <div className="result-grid">
-          <div className="result-card">
-            <h3>Scenario Results</h3>
-            <ul>
-              <li>Scenarios run: 18</li>
-              <li>Passed: 16</li>
-              <li>Failed: 2</li>
-              <li>Screenshots captured: 18</li>
-            </ul>
-          </div>
-        </div>
-      </JobStatusPanel>
+      <a className="run-btn" href={REWIND_APP_URL} target="_blank" rel="noreferrer">
+        Open UI Automation tool
+      </a>
     </div>
   )
 }

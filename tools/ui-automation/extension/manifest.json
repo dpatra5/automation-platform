@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Rewind Recorder",
+  "version": "1.0.0",
+  "description": "Record browser interactions for Rewind regression testing",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "cookies",
+    "scripting",
+    "webNavigation"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "externally_connectable": {
+    "matches": ["http://localhost:5173/*", "http://localhost:5174/*"]
+  }
+}

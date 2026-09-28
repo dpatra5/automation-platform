@@ -11,6 +11,31 @@ node_modules
 dist
 dist-ssr
 *.local
+.vite/
+
+# Secrets copied in with the integrated UI automation tool
+tools/ui-automation/backend/.env
+tools/ui-automation/backend/.venv
+venv/
+.venv/
+tools/ui-automation/backend/app/api/__pycache__
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.egg-info/
+*.py[cod]
+*.db
+*.db-*
+tools/ui-automation/backend/artifacts/
+.env
+.env.*
 
 # Editor directories and files
 .vscode/*
