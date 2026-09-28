@@ -1,4 +1,4 @@
-export type MenuKey = 'project-plan' | 'api-testing' | 'load-testing' | 'ui-automation'
+export type MenuKey = 'project-plan' | 'api-testing' | 'load-testing' | 'rewind-automation' | 'ui-automation'
 
 export interface MenuItem {
   key: MenuKey
@@ -29,9 +29,15 @@ export const MENU_ITEMS: MenuItem[] = [
     icon: '📈',
   },
   {
-    key: 'ui-automation',
+    key: 'rewind-automation',
     label: 'Rewind Automation Tool',
-    description: 'Run automated browser regression scenarios with Rewind.',
+    description: 'Open the independent Rewind regression testing tool.',
     icon: '🖥️',
+  },
+  {
+    key: 'ui-automation',
+    label: 'UI Automation',
+    description: 'Start a separate browser-flow automation workspace for recording and validating UI scenarios.',
+    icon: '🎯',
   },
 ]
