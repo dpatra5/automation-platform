@@ -149,6 +149,264 @@
   font-size: 15px;
 }
 
+.tool-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 30px;
+}
+
+.tool-eyebrow {
+  display: inline-block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.tool-page-mark {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--accent-bg);
+  font-size: 28px;
+}
+
+.ui-tool-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+  gap: 20px;
+  max-width: 900px;
+}
+
+.tool-panel {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.tool-panel h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--text-h);
+}
+
+.panel-copy {
+  margin-bottom: 22px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.tool-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.secondary-btn {
+  padding: 11px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text-h);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.stop-btn {
+  padding: 11px 18px;
+  border: 1px solid #f2b8bd;
+  border-radius: 10px;
+  background: #fff1f2;
+  color: #a13049;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.stop-btn:hover {
+  background: #fbdde1;
+}
+
+.tool-status-card {
+  align-self: start;
+}
+
+.flow-status {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 18px;
+}
+
+.flow-status-idle {
+  background: #eef0f5;
+  color: #626b7c;
+}
+
+.flow-status-recording {
+  background: #fff3cd;
+  color: #7a5b00;
+}
+
+.flow-status-ready {
+  background: #d1f4dd;
+  color: #0f5c33;
+}
+
+.flow-checklist {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.flow-checklist li::before {
+  content: '○';
+  margin-right: 9px;
+  color: #9aa1b1;
+}
+
+.flow-checklist li.check-done::before {
+  content: '✓';
+  color: #0f8a50;
+  font-weight: 700;
+}
+
+.script-panel {
+  max-width: 900px;
+  margin-top: 20px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #101323;
+  color: #e8ebf5;
+  box-shadow: var(--shadow);
+}
+
+.script-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.replay-private-note {
+  color: #aeb7cf;
+  font-size: 12px;
+}
+
+.script-panel h2 {
+  color: #fff;
+}
+
+.script-panel pre {
+  margin: 18px 0 0;
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font: 13px/1.6 ui-monospace, Consolas, monospace;
+}
+
+.replay-controls {
+  margin: 18px 0;
+  display: grid;
+  grid-template-columns: auto minmax(130px, 180px) 1fr auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.replay-controls .field-label {
+  margin-bottom: 8px;
+}
+
+.replay-controls .field,
+.replay-data {
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid #d6d9e4;
+  border-radius: 8px;
+  background: #fff;
+  color: #101323;
+  font: 13px var(--sans);
+}
+
+.replay-data {
+  min-width: 180px;
+  resize: vertical;
+}
+
+.replay-status {
+  grid-column: 1 / -1;
+  color: #cbd2e4;
+  font-size: 13px;
+}
+
+.activity-summary,
+.replay-results {
+  margin: 18px 0;
+  padding: 16px;
+  border-radius: 10px;
+  background: #181d31;
+}
+
+.activity-summary h3,
+.replay-results h3 {
+  margin: 0 0 6px;
+  color: #fff;
+  font-size: 15px;
+}
+
+.activity-summary p,
+.replay-results p {
+  margin: 0 0 10px;
+  color: #aeb7cf;
+  font-size: 13px;
+}
+
+.activity-summary ul,
+.replay-results ul {
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  color: #dfe4f2;
+  font-size: 13px;
+}
+
+.activity-summary li span {
+  color: #aeb7cf;
+  margin-left: 8px;
+}
+
+.replay-result-passed {
+  color: #73e2a6;
+}
+
+.replay-result-failed {
+  color: #ff9ba5;
+}
+
 .field-label {
   display: block;
   font-weight: 600;

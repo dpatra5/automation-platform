@@ -37,6 +37,7 @@ tools/ui-automation/backend/artifacts/
 tools/load-testing/backend/runs/
 tools/load-testing/runs/
 tools/api-testing/backend/data/
+tools/ui-automation-server/data/
 .env
 .env.*
 
