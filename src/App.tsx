@@ -4,7 +4,7 @@ import { Sidebar } from './components/Sidebar'
 import { ProjectPlanPage } from './pages/ProjectPlanPage'
 import { ApiTestingPage } from './pages/ApiTestingPage'
 import { LoadTestingPage } from './pages/LoadTestingPage'
-import { UiAutomationPage } from './pages/UiAutomationPage'
+import { RewindAutomationToolPage } from './pages/RewindAutomationToolPage'
 import { WelcomePage } from './pages/WelcomePage'
 import type { MenuKey } from './types'
 import './App.css'
@@ -27,7 +27,7 @@ function App() {
       case 'load-testing':
         return <LoadTestingPage />
       case 'ui-automation':
-        return <UiAutomationPage />
+        return <RewindAutomationToolPage />
       default:
         return <WelcomePage onSelect={handleSelect} />
     }

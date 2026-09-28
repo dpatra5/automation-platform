@@ -13,7 +13,7 @@ dist-ssr
 *.local
 .vite/
 
-# Secrets copied in with the integrated UI automation tool
+# Secrets copied in with the integrated Rewind Automation Tool
 tools/ui-automation/backend/.env
 tools/ui-automation/backend/.venv
 venv/

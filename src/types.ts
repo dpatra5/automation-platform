@@ -30,8 +30,8 @@ export const MENU_ITEMS: MenuItem[] = [
   },
   {
     key: 'ui-automation',
-    label: 'UI Automation',
-    description: 'Run automated UI regression scenarios across browsers.',
+    label: 'Rewind Automation Tool',
+    description: 'Run automated browser regression scenarios with Rewind.',
     icon: '🖥️',
   },
 ]
