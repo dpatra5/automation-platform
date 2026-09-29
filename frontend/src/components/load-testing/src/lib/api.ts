@@ -7,6 +7,7 @@ import type {
   DemoStats,
   Example,
   Health,
+  JmxImportResult,
   LoadPlan,
   LogRecord,
   RunDetail,
@@ -105,6 +106,7 @@ const runPath = (id: string) => `/runs/${encodeURIComponent(id)}`;
 export const api = {
   health: () => request<Health>('/health'),
   examples: () => request<Example[]>('/examples'),
+  importJmx: (jmx: string) => post<JmxImportResult>('/configs/import/jmx', { jmx }),
   validate: (req: ConfigRequest, signal?: AbortSignal) =>
     request<ValidationResult>('/configs/validate', {
       method: 'POST',

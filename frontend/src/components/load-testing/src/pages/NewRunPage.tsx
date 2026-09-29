@@ -1,9 +1,10 @@
-import { ChevronDown, FileUp, Play, RotateCcw, ShieldCheck } from 'lucide-react';
+import { ChevronDown, FileCode2, FileUp, Play, RotateCcw, ShieldCheck } from 'lucide-react';
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router';
 
 import { ConfigEditor } from '@/components/ConfigEditor';
 import { PageHeader } from '@/components/layout/AppLayout';
+import { QuickTestForm } from '@/components/QuickTestForm';
 import { ProfileChart } from '@/components/RunCharts';
 import { Alert, ErrorAlert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
@@ -12,13 +13,18 @@ import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Field, Input, Select, Toggle } from '@/components/ui/Field';
 import { Spinner } from '@/components/ui/Spinner';
+import { Tabs } from '@/components/ui/Tabs';
 import { useExamples, useStartRun, useValidation } from '@/hooks/queries';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDuration, formatInt, formatRps } from '@/lib/format';
 import type { ConfigSummary, Overrides } from '@/lib/types';
 
 const MAX_UPLOAD_BYTES = 256 * 1024;
+const MAX_JMX_BYTES = 5 * 1024 * 1024;
+
+type Mode = 'quick' | 'yaml';
 
 const STARTER = `version: 1
 name: my-first-run
@@ -68,17 +74,38 @@ function toOverrides(f: OverrideForm): Overrides {
 }
 
 function SummaryPanel({ summary, warnings }: { summary: ConfigSummary; warnings: string[] }) {
-  const rows: [string, string][] = [
-    ['Target', summary.base_url],
-    ['Peak rate', `${formatRps(summary.peak_rps)} rps (cap ${formatInt(summary.effective_cap)})`],
-    ['Duration', formatDuration(summary.duration_s)],
-    ['Expected requests', `~${formatInt(summary.expected_requests)}`],
-    [
-      'Execution',
-      `${summary.processes} proc · ${summary.workers} shards · ${summary.concurrency_per_process} workers/proc`,
-    ],
-    ['HTTP/2', summary.http2 ? 'enabled' : 'disabled'],
-  ];
+  const closed = summary.model_type === 'closed';
+  const rows: [string, string][] = closed
+    ? [
+        ['Target', summary.base_url],
+        ['Virtual users', `${formatInt(summary.peak_users)} peak`],
+        ['Duration', formatDuration(summary.duration_s)],
+        ...(summary.iterations ? [['Iterations', `${summary.iterations} per user`] as [string, string]] : []),
+        [
+          'Throughput cap',
+          summary.max_rps ? `${formatRps(summary.max_rps)} rps` : `safety cap ${formatInt(summary.effective_cap)} rps`,
+        ],
+        ['Test data', summary.data_rows ? `${formatInt(summary.data_rows)} rows` : 'none'],
+        ['Pass/fail checks', summary.thresholds ? `${summary.thresholds} threshold(s)` : 'none'],
+      ]
+    : [
+        ['Target', summary.base_url],
+        ['Peak rate', `${formatRps(summary.peak_rps)} rps (cap ${formatInt(summary.effective_cap)})`],
+        ['Duration', formatDuration(summary.duration_s)],
+        ['Expected requests', `~${formatInt(summary.expected_requests)}`],
+        [
+          'Execution',
+          `${summary.processes} proc · ${summary.workers} shards · ${summary.concurrency_per_process} workers/proc`,
+        ],
+        ['HTTP/2', summary.http2 ? 'enabled' : 'disabled'],
+      ];
+  // Users ramp linearly between stages, the same shape as a rate profile.
+  let previous = 0;
+  const userSteps = (summary.stages ?? []).map((s) => {
+    const step = { duration_s: s.duration_s, rate: previous, end_rate: s.users, name: null };
+    previous = s.users;
+    return step;
+  });
   return (
     <div className="space-y-4">
       {warnings.map((w) => (
@@ -97,24 +124,37 @@ function SummaryPanel({ summary, warnings }: { summary: ConfigSummary; warnings:
         ))}
       </dl>
       <div>
-        <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">Target rate</p>
-        <ProfileChart steps={summary.profile} />
+        <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+          {closed ? 'Virtual users over time' : 'Target rate'}
+        </p>
+        <ProfileChart steps={closed ? userSteps : summary.profile} unit={closed ? 'users' : 'rps'} />
       </div>
       <div>
-        <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">Routes</p>
-        <ul className="space-y-1.5">
+        <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+          {closed ? 'Scenario (each user runs these in order)' : 'Routes'}
+        </p>
+        <ol className="space-y-1.5">
           {summary.routes.map((r) => (
             <li key={r.name} className="flex items-center gap-2 text-sm">
               <Badge tone="brand" className="font-mono">
                 {r.method}
               </Badge>
-              <span className="truncate font-mono text-xs">{r.path}</span>
-              <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
-                {r.tenant ? `${r.tenant} · ` : ''}w={r.weight}
+              <span className="truncate font-mono text-xs" title={r.name}>
+                {r.path}
+              </span>
+              <span className="ml-auto shrink-0 text-xs text-slate-500 dark:text-slate-400">
+                {closed
+                  ? [
+                      r.checks ? `${r.checks} check${r.checks > 1 ? 's' : ''}` : null,
+                      r.extracts?.length ? `→ ${r.extracts.join(', ')}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                  : `${r.tenant ? `${r.tenant} · ` : ''}w=${r.weight}`}
               </span>
             </li>
           ))}
-        </ul>
+        </ol>
       </div>
     </div>
   );

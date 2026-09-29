@@ -26,10 +26,27 @@ export interface ConfigRequest {
   overrides?: Overrides;
 }
 
+export interface RouteSummary {
+  name: string;
+  method: string;
+  path: string;
+  weight: number;
+  tenant: string | null;
+  checks?: number;
+  extracts?: string[];
+  think_time?: string | null;
+}
+
+export interface StageSummary {
+  duration_s: number;
+  users: number;
+}
+
 export interface ConfigSummary {
   name: string | null;
   base_url: string;
   host: string;
+  model_type?: ModelType;
   peak_rps: number;
   effective_cap: number;
   duration_s: number;
@@ -39,7 +56,20 @@ export interface ConfigSummary {
   concurrency_per_process: number;
   http2: boolean;
   profile: { duration_s: number; rate: number; end_rate: number | null; name: string | null }[];
-  routes: { name: string; method: string; path: string; weight: number; tenant: string | null }[];
+  routes: RouteSummary[];
+  stages?: StageSummary[];
+  peak_users?: number;
+  iterations?: number | null;
+  max_rps?: number | null;
+  data_rows?: number;
+  thresholds?: number;
+}
+
+export type ModelType = 'open' | 'closed';
+
+export interface JmxImportResult {
+  yaml: string;
+  warnings: string[];
 }
 
 export interface ValidationResult {
@@ -86,6 +116,52 @@ export interface RunSummary {
     lag_p99_ms: number | null;
   };
   status_codes: Record<string, number>;
+  model?: ModelInfo;
+  aggregate_total?: AggregateRow;
+  thresholds?: ThresholdResult;
+}
+
+/** One row of the JMeter-style Aggregate Report (``label`` TOTAL covers all requests). */
+export interface AggregateRow {
+  label: string;
+  samples: number;
+  avg_ms: number | null;
+  min_ms: number | null;
+  median_ms: number | null;
+  p90_ms: number | null;
+  p95_ms: number | null;
+  p99_ms: number | null;
+  max_ms: number | null;
+  error_pct: number;
+  throughput_rps: number;
+  received_kb_s: number;
+  apdex: number | null;
+}
+
+export interface ThresholdCheck {
+  scope: string;
+  metric: string;
+  op: '<=' | '>=';
+  limit: number;
+  actual: number | null;
+  pass: boolean;
+}
+
+export interface ThresholdResult {
+  pass: boolean | null;
+  checks: ThresholdCheck[];
+}
+
+export interface ModelInfo {
+  type: ModelType;
+  peak_rps?: number;
+  peak_users?: number;
+  vus_peak?: number;
+  stages?: StageSummary[];
+  iterations_per_user?: number | null;
+  iterations_completed?: number;
+  max_rps?: number | null;
+  think_time?: string | null;
 }
 
 export interface RunMetrics {
@@ -97,6 +173,10 @@ export interface RunMetrics {
   headers: Record<string, unknown>;
   client: Record<string, number | boolean>;
   execution: Record<string, number>;
+  aggregate?: AggregateRow[];
+  failures?: Record<string, Record<string, number>>;
+  thresholds?: ThresholdResult;
+  model?: ModelInfo;
   [key: string]: unknown;
 }
 
@@ -113,6 +193,9 @@ export interface RunListItem {
   ratios: RunSummary['ratios'] | null;
   latency_ms: LatencySummary | null;
   analysis_pass: boolean | null;
+  thresholds_pass?: boolean | null;
+  model_type?: ModelType | null;
+  aggregate_total?: AggregateRow | null;
 }
 
 export interface Artifact {
@@ -166,6 +249,8 @@ export interface MetricsRow {
   p95_ms: number | null;
   p99_ms: number | null;
   dropped: number | null;
+  failed_rps?: number | null;
+  vus?: number | null;
 }
 
 export interface LivePoint {
@@ -174,6 +259,8 @@ export interface LivePoint {
   accepted: number;
   rate_limited: number;
   errors: number;
+  failed?: number | null;
+  vus?: number | null;
 }
 
 export interface RouteRow {
