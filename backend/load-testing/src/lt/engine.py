@@ -25,11 +25,12 @@ from lt.http_client import (
     PreparedRoute,
     build_client_pool,
     prepare_routes,
-    send,
+    send_rendered,
     warmup,
 )
 from lt.logging import JsonFormatter, get_logger, redact
 from lt.metrics import (
+    AGGREGATE_CSV_COLUMNS,
     FINE_CSV_COLUMNS,
     METRICS_CSV_COLUMNS,
     ROUTES_CSV_COLUMNS,
@@ -38,7 +39,9 @@ from lt.metrics import (
     write_csv,
     write_json,
 )
+from lt.scenario import Context, DataFeeder, ResponseView, check, safe_path
 from lt.scheduler import ArrivalSchedule, run_shards
+from lt.thresholds import evaluate as evaluate_thresholds
 from lt.utils.time import (
     event_loop_factory,
     high_resolution_timers,
@@ -68,7 +71,13 @@ class RunnerStats:
     fired: int = 0
     completed: int = 0
     cancelled: int = 0
+    iterations: int = 0
     interrupted: bool = False
+
+
+def collector_for(cfg: Config) -> MetricsCollector:
+    t = cfg.thresholds
+    return MetricsCollector(apdex_ms=(t.apdex_satisfied_ms, t.apdex_tolerated_ms))
 
 
 class Runner:
@@ -94,6 +103,8 @@ class Runner:
         self.start = 0.0
         self.stats = RunnerStats()
         self.drain_timeout = cfg.http.connect_timeout + cfg.http.read_timeout + 1.0
+        self.feeder = DataFeeder.for_config(cfg)
+        self._static_ctx = Context(cfg.variables)
 
     def _pick_route(self, shard: int) -> PreparedRoute:
         if len(self.routes) == 1:
@@ -121,24 +132,43 @@ class Runner:
         )
 
     async def _execute(self, client: httpx.AsyncClient, job: _Job) -> None:
+        route = job.route
+        ctx = self._static_ctx
+        if route.templated:
+            ctx = Context(self.cfg.variables, rng=self._rngs.get(job.shard))
+            ctx.vars.update(self.feeder.next() or {})
+        path, headers, content = route.render(ctx)
+        if not safe_path(path):
+            self.collector.record_result(
+                job.offset, route.name, None, 0.0, error_type="UnsafePath"
+            )
+            self.stats.completed += 1
+            return
         try:
-            status, headers, error = await send(client, job.route)
+            resp, error = await send_rendered(client, route.method, path, headers, content)
         except asyncio.CancelledError:
             self._record_cancelled(job)
             raise
         # CO-safe: measure from the scheduled time; if fired early, from the actual send.
         latency = self.clock() - min(job.target, job.fire_time)
-        route = job.route
+        status = resp.status_code if resp is not None else None
         expected = status is None or not route.expect_status or status in route.expect_status
-        self.collector.record_result(
-            job.offset,
-            route.name,
-            status,
-            latency,
-            error_type=error,
-            headers=headers,
-            expected=expected,
-        )
+        if resp is None:
+            self.collector.record_result(
+                job.offset, route.name, None, latency, error_type=error, expected=expected
+            )
+        else:
+            view = ResponseView(resp.content, resp.headers) if route.needs_body else None
+            self.collector.record_result(
+                job.offset,
+                route.name,
+                status,
+                latency,
+                headers=resp.headers,
+                expected=expected,
+                failure=check(route, resp.status_code, latency, view, ctx),
+                nbytes=len(resp.content),
+            )
         self.stats.completed += 1
         if self.events is not None:
             self.events.offer(
@@ -277,13 +307,14 @@ class ArtifactWriter:
         self.run_dir = run_dir
         self.run_id = run_id
         self.schedule = ArrivalSchedule(cfg.model.profile)
+        self.planned_s = cfg.model.total_duration
         self.grace_s = cfg.http.connect_timeout + cfg.http.read_timeout + 2.0
         self._last_logged = -1
 
     def snapshot(self, collector: MetricsCollector, elapsed: float) -> None:
         collector.finalize_before(max(int(elapsed - self.grace_s), 0))
         done = collector.finalized_until
-        rows = collector.metric_rows(self.schedule.total_duration)[:done]
+        rows = collector.metric_rows(self.planned_s)[:done]
         write_csv(self.run_dir / "metrics.csv", METRICS_CSV_COLUMNS, rows)
         sec = int(elapsed) - 1
         if sec > self._last_logged and sec in collector.windows:
@@ -297,18 +328,27 @@ class ArtifactWriter:
                     "accepted": w.accepted,
                     "rate_limited": w.s429,
                     "errors": w.errors,
+                    "failed": w.failed,
+                    "vus": w.vus,
                 },
             )
 
     def finalize(self, collector: MetricsCollector, info: RunInfo) -> dict[str, Any]:
-        collector.finalize_before(collector.n_seconds(self.schedule.total_duration) + 1)
-        planned = self.schedule.total_duration
-        duration = min(info.elapsed_s, planned) if info.interrupted else planned
+        closed = self.cfg.model.is_closed
+        planned = self.planned_s
+        collector.finalize_before(collector.n_seconds(planned) + 1)
+        # Closed runs may finish early (loop counts or data exhausted).
+        early = info.interrupted or closed
+        duration = min(info.elapsed_s, planned) if early else planned
         duration = max(duration, 1e-9)
         rows = collector.metric_rows(duration)
         write_csv(self.run_dir / "metrics.csv", METRICS_CSV_COLUMNS, rows)
         write_csv(self.run_dir / "routes.csv", ROUTES_CSV_COLUMNS, collector.route_rows())
         write_csv(self.run_dir / "fine.csv", FINE_CSV_COLUMNS, collector.fine_rows())
+        aggregate = collector.aggregate_rows(duration)
+        write_csv(self.run_dir / "aggregate.csv", AGGREGATE_CSV_COLUMNS, aggregate)
+        thresholds = evaluate_thresholds(self.cfg.thresholds, aggregate)
+        vus_peak = max((r["vus"] for r in rows), default=0)
         totals = collector.totals()
         means = {
             "attempted_rps": round(totals["attempted"] / duration, 3),
@@ -350,6 +390,10 @@ class ArtifactWriter:
             "routes": collector.route_totals(),
             "headers": collector.header_summary(),
             "scheduler": accuracy,
+            "model": self._model_info(vus_peak, info),
+            "aggregate": aggregate,
+            "failures": collector.failure_summary(),
+            "thresholds": thresholds,
             "client": {
                 "processes": info.processes,
                 "shards": self.cfg.model.workers,
@@ -396,9 +440,27 @@ class ArtifactWriter:
                 "lag_p99_ms": accuracy["lag_ms"]["p99"],
             },
             "status_codes": metrics["status_codes"],
+            "model": metrics["model"],
+            "aggregate_total": aggregate[-1],
+            "thresholds": thresholds,
         }
         write_json(self.run_dir / "summary.json", summary)
         return summary
+
+    def _model_info(self, vus_peak: int, info: RunInfo) -> dict[str, Any]:
+        m = self.cfg.model
+        if not m.is_closed:
+            return {"type": "open", "peak_rps": m.peak_rate}
+        return {
+            "type": "closed",
+            "peak_users": m.peak_users,
+            "vus_peak": vus_peak,
+            "stages": [{"duration_s": s.duration, "users": s.users} for s in m.stages],
+            "iterations_per_user": m.iterations,
+            "iterations_completed": info.extra.get("iterations", 0),
+            "max_rps": m.max_rps,
+            "think_time": m.think_time,
+        }
 
     def _scheduler_accuracy(self, collector: MetricsCollector, duration: float) -> dict[str, Any]:
         errors: list[float] = []
@@ -451,7 +513,7 @@ async def _run_in_process(
     info: RunInfo,
     transport: httpx.AsyncBaseTransport | None,
 ) -> MetricsCollector:
-    collector = MetricsCollector()
+    collector = collector_for(cfg)
     events = (
         EventSink(writer.run_dir / "events.jsonl", cfg.output.events_sample_rate, cfg.model.seed)
         if cfg.output.events_sample_rate > 0
@@ -469,17 +531,18 @@ async def _run_in_process(
             warmed = await warmup(pool, cfg)
             if warmed:
                 log.info("warmup complete", extra={"responses": warmed})
-            runner = Runner(cfg, collector, events=events)
+            runner = make_runner(cfg, collector, events=events)
             start = perf_counter() + START_DELAY_S
             flusher = asyncio.create_task(
                 _flush_loop(writer, lambda: collector, start, events, cfg.output.flush_interval)
             )
+            shards = cfg.model.workers if not cfg.model.is_closed else 1
             try:
                 stats = await runner.run(
                     pool,
                     start=start,
-                    shard_ids=range(cfg.model.workers),
-                    n_shards=cfg.model.workers,
+                    shard_ids=range(shards),
+                    n_shards=shards,
                     stop=stop,
                 )
             finally:
@@ -493,7 +556,20 @@ async def _run_in_process(
         info.events_written, info.events_dropped = events.written, events.dropped
     info.fired, info.completed, info.cancelled = stats.fired, stats.completed, stats.cancelled
     info.interrupted = stats.interrupted
+    if cfg.model.is_closed:
+        info.extra["iterations"] = stats.iterations
     return collector
+
+
+def make_runner(
+    cfg: Config, collector: MetricsCollector, *, events: EventSink | None = None
+) -> Any:
+    """``Runner`` (open model) or ``VuRunner`` (closed model); both share one interface."""
+    if cfg.model.is_closed:
+        from lt.vu import VuRunner
+
+        return VuRunner(cfg, collector, events=events)
+    return Runner(cfg, collector, events=events)
 
 
 def run_load(
@@ -508,7 +584,7 @@ def run_load(
     for warning in report.warnings:
         log.warning(warning)
     per_process = cfg.model.peak_rate / cfg.model.processes
-    if per_process > PER_PROCESS_RPS_GUIDE:
+    if not cfg.model.is_closed and per_process > PER_PROCESS_RPS_GUIDE:
         log.warning(
             "per-process rate exceeds typical single-process httpx capacity; "
             "if scheduler lag or latency grows, add processes (see docs/SCALING.md)",

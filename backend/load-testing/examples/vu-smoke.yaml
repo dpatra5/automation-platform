@@ -1,0 +1,30 @@
+# Smoke test: a few virtual users walk the shop flow once a second.
+# Local demo: start the Demo server (port 8080), then run this.
+version: 1
+name: vu-smoke-test
+base_url: http://127.0.0.1:8080
+safety:
+  allowlist: [127.0.0.1, localhost]
+model:
+  type: closed
+  users: 5
+  ramp_up: 5s
+  duration: 30s
+  think_time: 1s
+routes:
+  - name: login
+    method: POST
+    path: /app/login
+    body: { username: "user{{$vu}}", password: "{{password}}" }
+    extract: { token: "$.token" }
+  - name: list products
+    path: /app/products
+    headers: { Authorization: "Bearer {{token}}" }
+    assertions:
+      max_ms: 500
+      jsonpath: { "$.items[0].id": "*" }
+variables:
+  password: demo
+thresholds:
+  p95_ms: 500
+  error_rate: 0.01

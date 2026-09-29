@@ -45,7 +45,7 @@ def test_run_load_writes_all_artifacts(
     rows = read_csv(run_dir / "metrics.csv")
     assert list(rows[0]) == [
         "second", "attempted_rps", "accepted_rps", "429_rps", "error_rps",
-        "p50_ms", "p90_ms", "p95_ms", "p99_ms", "dropped",
+        "p50_ms", "p90_ms", "p95_ms", "p99_ms", "dropped", "failed_rps", "vus",
     ]  # fmt: skip
     assert float(rows[0]["attempted_rps"]) == 40
     metrics = json.loads((run_dir / "metrics.json").read_text())

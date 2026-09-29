@@ -50,9 +50,31 @@ METRICS_CSV_COLUMNS = (
     "p95_ms",
     "p99_ms",
     "dropped",
+    "failed_rps",
+    "vus",
 )
 ROUTES_CSV_COLUMNS = ("second", "route", "attempted", "accepted", "429", "errors")
 FINE_CSV_COLUMNS = ("bin", "t_start_s", "attempted", "accepted", "429")
+AGGREGATE_CSV_COLUMNS = (
+    "label",
+    "samples",
+    "avg_ms",
+    "min_ms",
+    "median_ms",
+    "p90_ms",
+    "p95_ms",
+    "p99_ms",
+    "max_ms",
+    "error_pct",
+    "throughput_rps",
+    "received_kb_s",
+    "apdex",
+)
+TOTAL_LABEL = "TOTAL"
+MAX_FAILURE_REASONS = 20
+# [samples, failures, bytes, apdex satisfied, apdex tolerating]
+_AGG_FIELDS = 5
+_UNSET: Any = object()
 
 
 def status_family(status: int | None) -> str:
@@ -86,6 +108,12 @@ class LatencyHistogram:
         if self.count == 0:
             return None
         return float(self._h.get_value_at_percentile(pct)) / 1000.0
+
+    def min_ms(self) -> float | None:
+        return float(self._h.get_min_value()) / 1000.0 if self.count else None
+
+    def mean_ms(self) -> float | None:
+        return round(float(self._h.get_mean_value()) / 1000.0, 3) if self.count else None
 
     def summary_ms(self) -> dict[str, float | int | None]:
         if self.count == 0:
@@ -218,7 +246,9 @@ class HeaderStat:
 
 
 class Window:
-    __slots__ = ("accepted", "attempted", "dropped", "errors", "final", "hist", "s429")
+    __slots__ = (
+        "accepted", "attempted", "dropped", "errors", "failed", "final", "hist", "s429", "vus",
+    )  # fmt: skip
 
     def __init__(self) -> None:
         self.attempted = 0
@@ -226,6 +256,8 @@ class Window:
         self.s429 = 0
         self.errors = 0
         self.dropped = 0
+        self.failed = 0
+        self.vus = 0
         self.hist: LatencyHistogram | None = None
         self.final: dict[str, float | None] | None = None
 
@@ -240,7 +272,7 @@ class Window:
 class MetricsCollector:
     """Accumulates run metrics keyed by *scheduled* time (CO-safe binning)."""
 
-    def __init__(self) -> None:
+    def __init__(self, apdex_ms: tuple[float, float] = (500.0, 1500.0)) -> None:
         self.windows: dict[int, Window] = {}
         self.routes: dict[tuple[int, str], list[int]] = {}
         self.fine: dict[int, list[int]] = {}
@@ -251,6 +283,10 @@ class MetricsCollector:
         self.error_types: Counter[str] = Counter()
         self.unexpected_status: Counter[str] = Counter()
         self.headers: dict[str, HeaderStat] = {}
+        self.agg: dict[str, list[int]] = {}
+        self.route_hist: dict[str, LatencyHistogram] = {}
+        self.failures: dict[str, Counter[str]] = {}
+        self.apdex_s = (apdex_ms[0] / 1000.0, apdex_ms[1] / 1000.0)
         self.late_samples = 0
         self.finalized_until = 0
 
@@ -287,8 +323,39 @@ class MetricsCollector:
         w = self._window(int(offset))
         w.dropped += 1
         w.errors += 1
+        w.failed += 1
         self._route(int(offset), route)[3] += 1
         self.error_types["ClientQueueFull"] += 1
+        self._sample(route, None, 0.0, "ClientQueueFull", 0)
+
+    def record_vus(self, sec: int, active: int) -> None:
+        w = self._window(sec)
+        w.vus = max(w.vus, active)
+
+    def _sample(
+        self, route: str, status: int | None, latency_s: float, failure: str | None, nbytes: int
+    ) -> None:
+        agg = self.agg.get(route)
+        if agg is None:
+            agg = self.agg[route] = [0] * _AGG_FIELDS
+        agg[0] += 1
+        agg[2] += nbytes
+        if failure is not None:
+            agg[1] += 1
+            reasons = self.failures.setdefault(route, Counter())
+            if failure in reasons or len(reasons) < MAX_FAILURE_REASONS:
+                reasons[failure] += 1
+            else:
+                reasons[OTHER_VALUES] += 1
+        elif latency_s <= self.apdex_s[0]:
+            agg[3] += 1
+        elif latency_s <= self.apdex_s[1]:
+            agg[4] += 1
+        if status is not None:
+            hist = self.route_hist.get(route)
+            if hist is None:
+                hist = self.route_hist[route] = LatencyHistogram()
+            hist.record_s(latency_s)
 
     def record_result(
         self,
@@ -300,10 +367,24 @@ class MetricsCollector:
         error_type: str | None = None,
         headers: Mapping[str, str] | None = None,
         expected: bool = True,
+        failure: str | None = _UNSET,
+        nbytes: int = 0,
     ) -> None:
         sec = int(offset)
         w = self._window(sec)
         r = self._route(sec, route)
+        if failure is _UNSET:
+            if status is None:
+                failure = error_type or "UnknownError"
+            elif status >= 400 and status != 429:
+                failure = f"status {status}"
+            else:
+                failure = None
+        elif status is None and failure is None:
+            failure = error_type or "UnknownError"
+        if failure is not None:
+            w.failed += 1
+        self._sample(route, status, latency_s, failure, nbytes)
         if status is None:
             w.errors += 1
             r[3] += 1
@@ -366,6 +447,8 @@ class MetricsCollector:
                     w.errors,
                     w.dropped,
                     w.hist.to_pairs() if w.hist else [],
+                    w.failed,
+                    w.vus,
                 ]
                 for s, w in self.windows.items()
             },
@@ -378,17 +461,24 @@ class MetricsCollector:
             "error_types": dict(self.error_types),
             "unexpected_status": dict(self.unexpected_status),
             "headers": {k: v.to_state() for k, v in self.headers.items()},
+            "agg": {k: list(v) for k, v in self.agg.items()},
+            "route_hist": {k: h.to_pairs() for k, h in self.route_hist.items()},
+            "failures": {k: dict(v) for k, v in self.failures.items()},
             "late_samples": self.late_samples,
         }
 
     def merge_state(self, state: Mapping[str, Any]) -> None:
-        for s, (att, acc, s429, err, drop, pairs) in state["windows"].items():
+        for s, (att, acc, s429, err, drop, pairs, *extra) in state["windows"].items():
             w = self._window(int(s))
             w.attempted += att
             w.accepted += acc
             w.s429 += s429
             w.errors += err
             w.dropped += drop
+            if extra:
+                w.failed += extra[0]
+                # Each process reports its own peak; together they approximate the total.
+                w.vus += extra[1]
             if pairs:
                 if w.final is None:
                     if w.hist is None:
@@ -413,6 +503,14 @@ class MetricsCollector:
         self.unexpected_status.update(state["unexpected_status"])
         for name, hs in state["headers"].items():
             self.headers.setdefault(name, HeaderStat()).merge_state(hs)
+        for route, vals in state.get("agg", {}).items():
+            agg = self.agg.setdefault(route, [0] * _AGG_FIELDS)
+            for i, v in enumerate(vals):
+                agg[i] += v
+        for route, pairs in state.get("route_hist", {}).items():
+            self.route_hist.setdefault(route, LatencyHistogram()).merge_pairs(pairs)
+        for route, reasons in state.get("failures", {}).items():
+            self.failures.setdefault(route, Counter()).update(reasons)
         self.late_samples += int(state["late_samples"])
 
     # -- views -----------------------------------------------------------------------------
@@ -441,9 +539,52 @@ class MetricsCollector:
                     "p95_ms": lat["p95"],
                     "p99_ms": lat["p99"],
                     "dropped": w.dropped,
+                    "failed_rps": round(w.failed / width, 3),
+                    "vus": w.vus,
                 }
             )
         return rows
+
+    def _aggregate_row(
+        self, label: str, agg: list[int], hist: LatencyHistogram | None, duration: float
+    ) -> dict[str, Any]:
+        samples, failures, nbytes, satisfied, tolerating = agg
+        h = hist if hist is not None and hist.count > 0 else None
+        return {
+            "label": label,
+            "samples": samples,
+            "avg_ms": h.mean_ms() if h else None,
+            "min_ms": h.min_ms() if h else None,
+            "median_ms": h.percentile_ms(50) if h else None,
+            "p90_ms": h.percentile_ms(90) if h else None,
+            "p95_ms": h.percentile_ms(95) if h else None,
+            "p99_ms": h.percentile_ms(99) if h else None,
+            "max_ms": h.percentile_ms(100) if h else None,
+            "error_pct": round(failures / samples * 100, 3) if samples else 0.0,
+            "throughput_rps": round(samples / duration, 3) if duration > 0 else 0.0,
+            "received_kb_s": round(nbytes / 1024 / duration, 3) if duration > 0 else 0.0,
+            "apdex": round((satisfied + tolerating / 2) / samples, 3) if samples else None,
+        }
+
+    def aggregate_rows(self, duration: float) -> list[dict[str, Any]]:
+        """JMeter-style Aggregate Report: one row per request label plus a TOTAL row."""
+        rows = [
+            self._aggregate_row(label, agg, self.route_hist.get(label), duration)
+            for label, agg in sorted(self.agg.items())
+        ]
+        total_agg = [sum(a[i] for a in self.agg.values()) for i in range(_AGG_FIELDS)]
+        total_hist = LatencyHistogram()
+        for hist in self.route_hist.values():
+            total_hist.merge(hist)
+        rows.append(self._aggregate_row(TOTAL_LABEL, total_agg, total_hist, duration))
+        return rows
+
+    def failure_summary(self, limit: int = 10) -> dict[str, dict[str, int]]:
+        return {
+            route: dict(reasons.most_common(limit))
+            for route, reasons in sorted(self.failures.items())
+            if reasons
+        }
 
     def route_rows(self) -> list[dict[str, Any]]:
         return [

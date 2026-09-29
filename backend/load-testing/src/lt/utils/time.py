@@ -36,6 +36,18 @@ def parse_duration(value: str | float | int) -> float:
     return seconds
 
 
+def parse_think_time(value: str | float | int) -> tuple[float, float]:
+    """``"1s"`` (constant) or ``"500ms-2s"`` (uniform random) -> ``(low, high)`` seconds."""
+    if isinstance(value, str) and "-" in value.strip().lstrip("-"):
+        low_text, _, high_text = value.partition("-")
+        low, high = parse_duration(low_text), parse_duration(high_text)
+        if high < low:
+            raise ValueError(f"think time range must be low-high, got {value!r}")
+        return low, high
+    seconds = parse_duration(value)
+    return seconds, seconds
+
+
 def format_duration(seconds: float) -> str:
     if seconds < 1:
         return f"{seconds * 1000:g}ms"

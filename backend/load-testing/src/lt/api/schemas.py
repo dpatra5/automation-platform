@@ -46,12 +46,23 @@ class RouteOut(BaseModel):
     path: str
     weight: float
     tenant: str | None
+    checks: int = 0
+    extracts: list[str] = Field(default_factory=list)
+    think_time: str | None = None
+
+
+class StageOut(BaseModel):
+    duration_s: float
+    users: int
 
 
 class ConfigSummary(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     name: str | None
     base_url: str
     host: str
+    model_type: Literal["open", "closed"] = "open"
     peak_rps: float
     effective_cap: int
     duration_s: float
@@ -62,6 +73,12 @@ class ConfigSummary(BaseModel):
     http2: bool
     profile: list[ProfileStepOut]
     routes: list[RouteOut]
+    stages: list[StageOut] = Field(default_factory=list)
+    peak_users: int = 0
+    iterations: int | None = None
+    max_rps: float | None = None
+    data_rows: int = 0
+    thresholds: int = 0
 
 
 class ValidationResult(BaseModel):
@@ -72,6 +89,8 @@ class ValidationResult(BaseModel):
 
 
 class RunListItem(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     run_id: str
     status: RunStatus
     name: str | None = None
@@ -84,6 +103,9 @@ class RunListItem(BaseModel):
     ratios: dict[str, float] | None = None
     latency_ms: dict[str, float | None] | None = None
     analysis_pass: bool | None = None
+    thresholds_pass: bool | None = None
+    model_type: str | None = None
+    aggregate_total: dict[str, Any] | None = None
 
 
 class Artifact(BaseModel):
@@ -114,6 +136,8 @@ class LivePoint(BaseModel):
     accepted: int
     rate_limited: int
     errors: int
+    failed: int | None = None
+    vus: int | None = None
 
 
 class Timeseries(BaseModel):
@@ -144,6 +168,15 @@ class Example(BaseModel):
     name: str
     filename: str
     yaml: str
+
+
+class JmxImportRequest(_Model):
+    jmx: str = Field(min_length=1, max_length=5 * 1024 * 1024)
+
+
+class JmxImportResult(BaseModel):
+    yaml: str
+    warnings: list[str]
 
 
 class DemoServerRequest(_Model):

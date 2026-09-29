@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import json
+import http.cookiejar
 import math
 import ssl
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -15,44 +14,18 @@ import truststore
 
 from lt import __version__
 from lt.config import Config, host_allowed
+from lt.scenario import PreparedRoute as PreparedRoute
+from lt.scenario import prepare_routes as prepare_routes
 
 
-@dataclass(frozen=True, slots=True)
-class PreparedRoute:
-    name: str
-    tenant: str
-    method: str
-    path: str
-    headers: dict[str, str]
-    content: bytes | None
-    expect_status: frozenset[int]
-    weight: float
+class _NullCookieJar(http.cookiejar.CookieJar):
+    """Client-level jar that stores nothing, so virtual users never share cookies."""
 
+    def set_cookie(self, cookie: http.cookiejar.Cookie) -> None:
+        return None
 
-def prepare_routes(cfg: Config) -> list[PreparedRoute]:
-    routes: list[PreparedRoute] = []
-    for r in cfg.routes:
-        headers = dict(r.headers)
-        content: bytes | None = None
-        if isinstance(r.body, dict | list):
-            content = json.dumps(r.body, separators=(",", ":")).encode()
-            if not any(k.lower() == "content-type" for k in {**cfg.default_headers, **headers}):
-                headers["Content-Type"] = "application/json"
-        elif isinstance(r.body, str):
-            content = r.body.encode()
-        routes.append(
-            PreparedRoute(
-                name=r.name,
-                tenant=r.tenant_key,
-                method=r.method,
-                path=r.path,
-                headers=headers,
-                content=content,
-                expect_status=frozenset(r.expect_status),
-                weight=r.weight,
-            )
-        )
-    return routes
+    def extract_cookies(self, response: Any, request: Any) -> None:
+        return None
 
 
 class HostNotAllowedError(httpx.HTTPError):
@@ -100,6 +73,8 @@ def build_client(
         trust_env=h.trust_env,
         transport=transport,
         event_hooks=hooks,
+        # A raw CookieJar is used as-is; wrapping it in httpx.Cookies would copy it into a real jar.
+        cookies=_NullCookieJar() if cfg.model.is_closed else None,
     )
 
 
@@ -163,12 +138,35 @@ async def send(
     return resp.status_code, resp.headers, None
 
 
+async def send_rendered(
+    client: httpx.AsyncClient,
+    method: str,
+    path: str,
+    headers: dict[str, str],
+    content: bytes | None,
+    cookies: httpx.Cookies | None = None,
+) -> tuple[httpx.Response | None, str | None]:
+    """Send with an optional per-user cookie jar; returns ``(response, error_type)``."""
+    try:
+        request = client.build_request(method, path, headers=headers or None, content=content)
+        if cookies is not None:
+            cookies.set_cookie_header(request)
+        resp = await client.send(request)
+    except (httpx.HTTPError, OSError) as exc:
+        return None, type(exc).__name__
+    if cookies is not None:
+        cookies.extract_cookies(resp)
+    return resp, None
+
+
 async def warmup(pool: ClientPool, cfg: Config) -> int:
     """Open pooled connections before the measured run; returns successful responses."""
     remaining = cfg.http.warmup_requests
     if remaining <= 0:
         return 0
-    path = cfg.http.warmup_path or cfg.routes[0].path
+    path = cfg.http.warmup_path or next(
+        (r.path for r in cfg.routes if "{{" not in r.path and r.method == "GET"), "/"
+    )
     ok = 0
     while remaining > 0:
         batch = []

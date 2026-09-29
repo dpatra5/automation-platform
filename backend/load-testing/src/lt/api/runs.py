@@ -38,6 +38,7 @@ ARTIFACTS = (
     "analysis.json",
     "config.json",
     "metrics.csv",
+    "aggregate.csv",
     "routes.csv",
     "fine.csv",
     "run.log",
@@ -288,6 +289,10 @@ class RunManager:
                         ratios=summary.get("ratios"),
                         latency_ms=summary.get("latency_ms"),
                         analysis_pass=analysis.get("pass") if analysis else None,
+                        thresholds_pass=(summary.get("thresholds") or {}).get("pass"),
+                        model_type=(summary.get("model") or {}).get("type")
+                        or (config.get("model") or {}).get("type"),
+                        aggregate_total=summary.get("aggregate_total"),
                     )
                 )
             return items

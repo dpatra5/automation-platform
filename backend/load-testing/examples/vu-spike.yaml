@@ -1,0 +1,30 @@
+# Spike test: baseline users, a sudden surge, then recovery (staged thread group).
+# Local demo: start the Demo server (port 8080), then run this.
+version: 1
+name: vu-spike-test
+base_url: http://127.0.0.1:8080
+safety:
+  allowlist: [127.0.0.1, localhost]
+  max_rps_cap: 1000
+model:
+  type: closed
+  think_time: 200ms-500ms
+  stages:
+    - { duration: 10s, users: 10 } # ramp to baseline
+    - { duration: 20s, users: 10 } # hold baseline
+    - { duration: 5s, users: 100 } # spike
+    - { duration: 20s, users: 100 } # hold spike
+    - { duration: 5s, users: 10 } # recover
+    - { duration: 10s, users: 10 }
+routes:
+  - name: login
+    method: POST
+    path: /app/login
+    body: { username: "spike{{$vu}}", password: "demo" }
+    extract: { token: "$.token" }
+  - name: browse
+    path: /app/products?page={{$iteration}}
+    headers: { Authorization: "Bearer {{token}}" }
+thresholds:
+  p99_ms: 1500
+  error_rate: 0.05

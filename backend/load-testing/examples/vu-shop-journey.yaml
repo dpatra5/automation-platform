@@ -1,0 +1,63 @@
+# Load test of a realistic user journey (JMeter-style thread group):
+# data-driven logins, token + cookie correlation, assertions, think time and SLAs.
+# Local demo: start the Demo server (port 8080), then run this.
+version: 1
+name: vu-shop-journey
+base_url: http://127.0.0.1:8080
+safety:
+  allowlist: [127.0.0.1, localhost]
+  max_rps_cap: 500
+model:
+  type: closed
+  users: 50
+  ramp_up: 20s
+  duration: 60s
+  ramp_down: 10s
+  think_time: 500ms-2s
+  max_rps: 200 # throughput shaping, like JMeter's Constant Throughput Timer
+http:
+  http2: false
+  max_connections: 100
+data:
+  mode: sequential
+  csv: |
+    username,search
+    alice,desk
+    bob,chair
+    carol,lamp
+    dave,keyboard
+routes:
+  - name: login
+    method: POST
+    path: /app/login
+    body: { username: "{{username}}", password: "demo" }
+    expect_status: [200]
+    extract: { token: "$.token" }
+  - name: profile (session cookie)
+    path: /app/profile
+    assertions:
+      jsonpath: { "$.username": "{{username}}" }
+  - name: search
+    path: /app/products?q={{search}}
+    headers: { Authorization: "Bearer {{token}}" }
+    extract: { product_id: "$.items[0].id" }
+    assertions:
+      max_ms: 800
+  - name: product detail
+    path: /app/products/{{product_id}}
+    headers: { Authorization: "Bearer {{token}}" }
+    assertions:
+      body_contains: ['"in_stock"']
+  - name: add to cart
+    method: POST
+    path: /app/cart
+    headers: { Authorization: "Bearer {{token}}" }
+    body: { product_id: "{{product_id}}", quantity: 1 }
+    expect_status: [201]
+thresholds:
+  p95_ms: 800
+  error_rate: 0.01
+  min_apdex: 0.9
+  routes:
+    login: { p95_ms: 500 }
+    add to cart: { error_rate: 0 }

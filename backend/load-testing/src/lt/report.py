@@ -59,8 +59,44 @@ def format_summary(summary: dict[str, Any], analysis: dict[str, Any] | None = No
         f"lag p99 {_fmt(summary['scheduler']['lag_p99_ms'], 'ms')}",
         "status     " + ", ".join(f"{k}: {v:,}" for k, v in summary["status_codes"].items()),
     ]
+    aggregate = summary.get("aggregate")
+    if aggregate:
+        lines += ["", format_aggregate(aggregate)]
+    thresholds = summary.get("thresholds") or {}
+    if thresholds.get("checks"):
+        lines += ["", format_thresholds(thresholds)]
     if analysis:
         lines += ["", format_analysis(analysis)]
+    return "\n".join(lines)
+
+
+_AGG_COLS = (
+    ("samples", "samples", 9), ("avg_ms", "avg", 9), ("median_ms", "median", 9),
+    ("p90_ms", "p90", 9), ("p95_ms", "p95", 9), ("p99_ms", "p99", 9), ("max_ms", "max", 9),
+    ("error_pct", "error%", 8), ("throughput_rps", "req/s", 10), ("apdex", "apdex", 7),
+)  # fmt: skip
+
+
+def format_aggregate(rows: list[dict[str, Any]]) -> str:
+    """JMeter-style Aggregate Report table."""
+    width = min(max((len(r["label"]) for r in rows), default=5), 40)
+    out = ["aggregate report", f"  {'label':<{width}}" + "".join(f"{h:>{w}}" for _, h, w in _AGG_COLS)]
+    for r in rows:
+        cells = ""
+        for key, _, w in _AGG_COLS:
+            v = r.get(key)
+            text = "-" if v is None else (f"{v:,.1f}" if isinstance(v, float) else f"{v:,}")
+            cells += f"{text:>{w}}"
+        out.append(f"  {r['label'][:width]:<{width}}{cells}")
+    return "\n".join(out)
+
+
+def format_thresholds(result: dict[str, Any]) -> str:
+    lines = [f"thresholds [{_verdict(result.get('pass'))}]"]
+    for c in result["checks"]:
+        actual = "n/a" if c["actual"] is None else f"{c['actual']:,.4g}"
+        mark = "ok  " if c["pass"] else "FAIL"
+        lines.append(f"  {mark} {c['scope']}: {c['metric']} {actual} {c['op']} {c['limit']:g}")
     return "\n".join(lines)
 
 

@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from lt.discover import DiscoveryResult, Endpoint, LoadPlan
 
 EXIT_INVALID = 2
+EXIT_THRESHOLDS = 3
 EXIT_INTERRUPTED = 130
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -122,10 +123,43 @@ def run(
     except FileExistsError as exc:
         click.echo(f"error: run directory already exists: {exc.filename}", err=True)
         sys.exit(EXIT_INVALID)
-    click.echo(format_summary(result.summary))
+    click.echo(format_summary({**result.summary, "aggregate": _aggregate(result.run_dir)}))
     click.echo(f"\nartifacts: {result.run_dir}")
     if result.interrupted:
         sys.exit(EXIT_INTERRUPTED)
+    if (result.summary.get("thresholds") or {}).get("pass") is False:
+        sys.exit(EXIT_THRESHOLDS)
+
+
+def _aggregate(run_dir: Path) -> list[dict[str, Any]]:
+    try:
+        metrics = json.loads((run_dir / "metrics.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    rows: list[dict[str, Any]] = metrics.get("aggregate") or []
+    return rows
+
+
+@main.command("import-jmx")
+@click.argument("jmx_path", type=click.Path(exists=True, dir_okay=False))
+@click.option("-o", "--output", type=click.Path(dir_okay=False), help="Write YAML here.")
+def import_jmx(jmx_path: str, output: str | None) -> None:
+    """Convert an Apache JMeter .jmx test plan into an lt config (CSV files are inlined)."""
+    from lt.jmx import JmxError, jmx_to_yaml
+
+    path = Path(jmx_path)
+    try:
+        text, warnings = jmx_to_yaml(path.read_text(encoding="utf-8"), data_dir=path.parent)
+    except JmxError as exc:
+        click.echo(f"error: {exc}", err=True)
+        sys.exit(EXIT_INVALID)
+    for warning in warnings:
+        click.echo(f"warning: {warning}", err=True)
+    if output:
+        Path(output).write_text(text, encoding="utf-8")
+        click.echo(f"wrote {output}")
+    else:
+        click.echo(text, nl=False)
 
 
 @main.command()
@@ -141,13 +175,22 @@ def validate(config_path: str, max_rps_cap: int | None) -> None:
         sys.exit(EXIT_INVALID)
     for warning in report.warnings:
         click.echo(f"warning: {warning}", err=True)
+    click.echo(f"OK  {config_path}")
+    click.echo(f"  target      {cfg.base_url} (host {report.host!r} allowed)")
+    if cfg.model.is_closed:
+        stages = ", ".join(f"{format_duration(s.duration)}->{s.users}" for s in cfg.model.stages)
+        click.echo(f"  users       {cfg.model.peak_users} peak (stages {stages})")
+        click.echo(f"  duration    {format_duration(cfg.model.total_duration)}")
+        if cfg.model.iterations:
+            click.echo(f"  iterations  {cfg.model.iterations} per user")
+        click.echo(f"  pacing      <= {cfg.model.max_rps or report.effective_cap:g} RPS total")
+        click.echo(f"  scenario    {' -> '.join(r.name for r in cfg.routes)}")
+        return
     steps = ", ".join(
         f"{format_duration(s.duration)}@{s.rate:g}"
         + (f"->{s.end_rate:g}" if s.end_rate is not None else "")
         for s in cfg.model.profile
     )
-    click.echo(f"OK  {config_path}")
-    click.echo(f"  target      {cfg.base_url} (host {report.host!r} allowed)")
     click.echo(f"  profile     {steps}")
     click.echo(f"  peak rate   {report.peak_rate:g} RPS (cap {report.effective_cap})")
     click.echo(f"  duration    {format_duration(cfg.model.total_duration)}")

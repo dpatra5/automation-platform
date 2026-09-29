@@ -26,6 +26,7 @@ dependencies = [
   "truststore==0.10.4",
   "pydantic==2.9.2",
   "PyYAML==6.0.2",
+  "defusedxml==0.7.1",
   "hdrhistogram==0.10.3",
   "fastapi==0.115.0",
   "uvicorn==0.30.6",

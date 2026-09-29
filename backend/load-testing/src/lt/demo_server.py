@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import secrets
 import socket
 import subprocess
 import sys
@@ -16,7 +17,8 @@ from types import TracebackType
 from typing import Literal, Protocol
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, Request, Response
+from pydantic import BaseModel, Field
 from starlette.types import ASGIApp, Receive, Send
 from starlette.types import Scope as ASGIScope
 
@@ -27,6 +29,32 @@ ALGOS: tuple[Algo, ...] = ("token-bucket", "fixed-window", "sliding-window")
 _OK_BODY = b'{"ok":true}'
 _LIMITED_BODY = b'{"error":"rate_limited"}'
 _MANAGEMENT_PATHS = frozenset({"/healthz", "/__stats"})
+# Not rate limited: a small shop API for virtual-user (closed model) scenarios.
+_APP_PREFIX = "/app/"
+DEMO_PASSWORD = "demo"  # noqa: S105 - public demo credential
+_MAX_SESSIONS = 10_000
+_PRODUCTS = [
+    {"id": i, "name": name, "price": price}
+    for i, (name, price) in enumerate(
+        [
+            ("Desk lamp", 24.5), ("Office chair", 149.0), ("Standing desk", 399.0),
+            ("Monitor arm", 79.9), ("Keyboard", 59.0), ("Mouse", 25.0), ("Headset", 89.0),
+            ("Webcam", 69.0), ("USB hub", 19.9), ("Notebook", 4.5), ("Desk lamp XL", 34.0),
+            ("Cable tray", 15.0),
+        ],
+        start=1,
+    )
+]  # fmt: skip
+
+
+class _Login(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    password: str
+
+
+class _CartItem(BaseModel):
+    product_id: int
+    quantity: int = Field(default=1, ge=1, le=100)
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,8 +185,82 @@ def create_app(settings: DemoSettings, clock: Callable[[], float] = time.perf_co
     async def get_stats() -> dict[str, dict[str, int]]:
         return {k: {"allowed": v[0], "denied": v[1]} for k, v in stats.items()}
 
+    sessions: dict[str, str] = {}
+    carts: dict[str, list[dict[str, int]]] = {}
+
+    def user_for(authorization: str | None) -> str:
+        token = (authorization or "").removeprefix("Bearer ").strip()
+        user = sessions.get(token)
+        if user is None:
+            raise HTTPException(401, "missing or invalid bearer token")
+        return user
+
+    async def app_delay() -> None:
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+    @api.post("/app/login")
+    async def app_login(body: _Login, response: Response) -> dict[str, str]:
+        await app_delay()
+        if body.password != DEMO_PASSWORD:
+            raise HTTPException(401, "invalid credentials")
+        if len(sessions) >= _MAX_SESSIONS:
+            sessions.clear()
+            carts.clear()
+        token = secrets.token_hex(12)
+        sessions[token] = body.username
+        response.set_cookie("session", token, httponly=True, samesite="lax")
+        return {"token": token, "username": body.username}
+
+    @api.get("/app/products")
+    async def app_products(
+        q: str = "", page: int = 1, authorization: str | None = Header(default=None)
+    ) -> dict[str, object]:
+        user_for(authorization)
+        await app_delay()
+        words = [w for w in q.lower().split() if w]
+        items = [p for p in _PRODUCTS if all(w in str(p["name"]).lower() for w in words)]
+        start = (max(page, 1) - 1) * 5
+        return {"items": items[start : start + 5], "count": len(items), "page": page}
+
+    @api.get("/app/products/{product_id}")
+    async def app_product(
+        product_id: int, authorization: str | None = Header(default=None)
+    ) -> dict[str, object]:
+        user_for(authorization)
+        await app_delay()
+        for product in _PRODUCTS:
+            if product["id"] == product_id:
+                return {**product, "in_stock": product_id % 4 != 0}
+        raise HTTPException(404, "product not found")
+
+    @api.post("/app/cart", status_code=201)
+    async def app_cart(
+        body: _CartItem, authorization: str | None = Header(default=None)
+    ) -> dict[str, object]:
+        user = user_for(authorization)
+        await app_delay()
+        if not any(p["id"] == body.product_id for p in _PRODUCTS):
+            raise HTTPException(404, "product not found")
+        cart = carts.setdefault(user, [])[-49:]
+        cart.append({"product_id": body.product_id, "quantity": body.quantity})
+        carts[user] = cart
+        return {"items": len(cart), "user": user}
+
+    @api.get("/app/profile")
+    async def app_profile(request: Request) -> dict[str, str]:
+        await app_delay()
+        user = sessions.get(request.cookies.get("session", ""))
+        if user is None:
+            raise HTTPException(401, "no session cookie")
+        return {"username": user}
+
     async def app(scope: ASGIScope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope["path"] in _MANAGEMENT_PATHS:
+        if (
+            scope["type"] != "http"
+            or scope["path"] in _MANAGEMENT_PATHS
+            or scope["path"].startswith(_APP_PREFIX)
+        ):
             await api(scope, receive, send)
             return
         key = "global"

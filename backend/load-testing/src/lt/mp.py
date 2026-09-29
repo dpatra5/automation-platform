@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from lt.config import Config
-from lt.engine import ArtifactWriter, RunInfo, Runner, install_stop_handlers
+from lt.engine import ArtifactWriter, RunInfo, collector_for, install_stop_handlers, make_runner
 from lt.http_client import build_client_pool, warmup
 from lt.logging import get_logger
 from lt.metrics import EventSink, MetricsCollector
@@ -41,6 +41,11 @@ def shard_sets(n_shards: int, processes: int) -> list[list[int]]:
     return [list(range(i, n_shards, processes)) for i in range(processes)]
 
 
+def _shard_count(cfg: Config) -> int:
+    # Closed model: process i owns virtual users i, i+P, ... (one "shard" per process).
+    return cfg.model.processes if cfg.model.is_closed else cfg.model.workers
+
+
 async def _child_async(
     idx: int,
     cfg: Config,
@@ -57,7 +62,7 @@ async def _child_async(
         if sample_rate > 0
         else None
     )
-    runner = Runner(cfg, MetricsCollector(), events=events)
+    runner = make_runner(cfg, collector_for(cfg), events=events)
     stop = asyncio.Event()
     backpressure = 0
     loop = asyncio.get_running_loop()
@@ -74,7 +79,7 @@ async def _child_async(
             last = perf_counter()
             try:
                 q.put_nowait(("delta", idx, runner.collector.to_state()))
-                runner.collector = MetricsCollector()
+                runner.collector = collector_for(cfg)
             except queue_mod.Full:
                 backpressure += 1
             if events is not None:
@@ -88,7 +93,7 @@ async def _child_async(
         pump_task = asyncio.create_task(pump())
         try:
             stats = await runner.run(
-                pool, start=start, shard_ids=shard_ids, n_shards=cfg.model.workers, stop=stop
+                pool, start=start, shard_ids=shard_ids, n_shards=_shard_count(cfg), stop=stop
             )
         finally:
             pump_task.cancel()
@@ -146,9 +151,9 @@ def run_multiprocess(cfg: Config, writer: ArtifactWriter, info: RunInfo) -> Metr
             name=f"lt-worker-{i}",
             daemon=True,
         )
-        for i, shards in enumerate(shard_sets(cfg.model.workers, n_proc))
+        for i, shards in enumerate(shard_sets(_shard_count(cfg), n_proc))
     ]
-    collector = MetricsCollector()
+    collector = collector_for(cfg)
     finished: set[int] = set()
     restore = install_stop_handlers(stop_ev.set)
     start_perf = perf_counter()
@@ -199,6 +204,7 @@ def run_multiprocess(cfg: Config, writer: ArtifactWriter, info: RunInfo) -> Metr
                 info.fired += stats["fired"]
                 info.completed += stats["completed"]
                 info.cancelled += stats["cancelled"]
+                info.extra["iterations"] = info.extra.get("iterations", 0) + stats["iterations"]
                 info.interrupted = info.interrupted or stats["interrupted"]
                 info.snapshot_backpressure += payload["backpressure"]
                 info.events_written += payload["events_written"]

@@ -189,8 +189,9 @@ def test_run_listing_detail_and_timeseries(client: TestClient, tmp_path: Path) -
     assert ts["metrics"][0]["p99_ms"] == 3.0
     assert ts["metrics"][1]["p99_ms"] is None
     assert ts["live"] == [
-        {"second": 0, "attempted": 5, "accepted": 4, "rate_limited": 1, "errors": 0}
-    ]
+        {"second": 0, "attempted": 5, "accepted": 4, "rate_limited": 1, "errors": 0,
+         "failed": None, "vus": None}
+    ]  # fmt: skip
 
     logs = client.get("/api/v1/runs/20260101T000000Z-aaaaaa/logs?tail=1").json()
     assert [r["msg"] for r in logs] == ["progress"]

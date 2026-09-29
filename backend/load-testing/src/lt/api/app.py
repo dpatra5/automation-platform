@@ -29,6 +29,8 @@ from lt.api.schemas import (
     DemoServerState,
     Example,
     Health,
+    JmxImportRequest,
+    JmxImportResult,
     ProfileStepOut,
     RouteOut,
     RunDetail,
@@ -37,6 +39,7 @@ from lt.api.schemas import (
     ScanRequest,
     ScanRunRequest,
     ScanSummary,
+    StageOut,
     StopRequest,
     Timeseries,
     ValidationResult,
@@ -52,6 +55,7 @@ from lt.config import (
     host_allowed,
     parse_config_text,
 )
+from lt.jmx import JmxError, jmx_to_yaml
 
 _ENV_REF_RE = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\}")
 _CSP = (
@@ -134,12 +138,17 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 "environment variable references (${...}) are not allowed via the API"
             )
         cfg = parse_config_text(req.yaml, expand_env=False)
+        if cfg.data is not None and cfg.data.file is not None:
+            raise ConfigError("data.file is not allowed via the API; paste the CSV into data.csv")
         overrides = req.overrides.model_dump(exclude_none=True)
         if overrides:
             try:
                 cfg = apply_overrides(cfg, **overrides)
             except ValueError as exc:
                 raise ConfigError(str(exc)) from exc
+        if cfg.safety.max_rps_cap > settings.max_rps_cap:
+            # Virtual users are paced at runtime, so the server cap must be in the config itself.
+            cfg = apply_overrides(cfg, max_rps_cap=settings.max_rps_cap)
         if not settings.any_host and not host_allowed(cfg.host, settings.allowed_hosts):
             raise SafetyError(
                 f"host {cfg.host!r} is not permitted by this server "
@@ -151,28 +160,54 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     app.state.scans = scans
 
     def summarize(cfg: Config, report: SafetyReport) -> ConfigSummary:
+        m = cfg.model
         return ConfigSummary(
             name=cfg.name,
             base_url=cfg.base_url,
             host=report.host,
-            peak_rps=report.peak_rate,
+            model_type=m.type,
+            peak_rps=report.peak_rate if not m.is_closed else (m.max_rps or report.effective_cap),
             effective_cap=report.effective_cap,
-            duration_s=cfg.model.total_duration,
-            expected_requests=round(cfg.model.expected_events),
-            processes=cfg.model.processes,
-            workers=cfg.model.workers,
+            duration_s=m.total_duration,
+            expected_requests=round(m.expected_events),
+            processes=m.processes,
+            workers=m.workers,
             concurrency_per_process=cfg.http.effective_concurrency,
             http2=cfg.http.http2,
             profile=[
                 ProfileStepOut(duration_s=s.duration, rate=s.rate, end_rate=s.end_rate, name=s.name)
-                for s in cfg.model.profile
+                for s in m.profile
             ],
             routes=[
                 RouteOut(
-                    name=r.name, method=r.method, path=r.path, weight=r.weight, tenant=r.tenant
+                    name=r.name,
+                    method=r.method,
+                    path=r.path,
+                    weight=r.weight,
+                    tenant=r.tenant,
+                    checks=(
+                        (1 if r.expect_status else 0)
+                        + (1 if r.assertions.max_ms else 0)
+                        + len(r.assertions.body_contains)
+                        + len(r.assertions.body_not_contains)
+                        + len(r.assertions.jsonpath)
+                    ),
+                    extracts=list(r.extract),
+                    think_time=r.think_time or m.think_time,
                 )
                 for r in cfg.routes
             ],
+            stages=[StageOut(duration_s=s.duration, users=s.users) for s in m.stages],
+            peak_users=m.peak_users,
+            iterations=m.iterations,
+            max_rps=m.max_rps,
+            data_rows=len(cfg.data.records()) if cfg.data is not None else 0,
+            thresholds=sum(
+                1
+                for t in (cfg.thresholds, *cfg.thresholds.routes.values())
+                for k, v in t.model_dump().items()
+                if v is not None and k not in ("apdex_satisfied_ms", "apdex_tolerated_ms", "routes")
+            ),
         )
 
     public = APIRouter(prefix="/api/v1", tags=["meta"])
@@ -200,6 +235,14 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         return ValidationResult(
             valid=True, warnings=report.warnings, summary=summarize(cfg, report)
         )
+
+    @api.post("/configs/import/jmx", tags=["configs"])
+    def import_jmx(req: JmxImportRequest) -> JmxImportResult:
+        try:
+            text, warnings = jmx_to_yaml(req.jmx)
+        except JmxError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return JmxImportResult(yaml=text, warnings=warnings)
 
     @api.get("/runs", tags=["runs"])
     def list_runs() -> list[RunListItem]:
