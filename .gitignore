@@ -1,12 +1,67 @@
+# ===================== Python =====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtualenv
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+
+# Test / coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.tox/
+.nox/
+
+# ===================== Node / Vite / TypeScript =====================
+node_modules/
+.pnp
+.pnp.*
+
+# Build output
+frontend/dist/
+frontend/build/
+frontend/.vite/
+**/.vite/
+**/vite.config.*.timestamp-*
+
+# TS build info
+*.tsbuildinfo
+frontend/node_modules/.tmp/
+
+# Lint / formatter caches
+.eslintcache
+.oxlintcache
+
 # Logs
-logs
-*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
+*.log
 
+# ===================== Env / secrets =====================
+.env
+.env.*
+!.env.example
+!.env.template
 node_modules
 dist
 dist-ssr
@@ -39,13 +94,17 @@ backend/api-testing/data/
 .env
 .env.*
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# ===================== Editor / OS =====================
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+
+# ===================== Misc =====================
+*.tmp
+
+# Local session cache
+backend/sprintguard/.sessions.json
+

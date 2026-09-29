@@ -1,40 +1,36 @@
-import { useState } from 'react'
-import { Navbar } from './components/Navbar'
-import { Sidebar } from './components/Sidebar'
-import { ProjectPlanPage } from './pages/ProjectPlanPage'
-import { ApiTestingPage } from './pages/ApiTestingPage'
-import { LoadTestingPage } from './pages/LoadTestingPage'
-import { RewindAutomationToolPage } from './pages/RewindAutomationToolPage'
-import { UiAutomationToolPage } from './pages/UiAutomationToolPage'
-import { WelcomePage } from './pages/WelcomePage'
-import type { MenuKey } from './types'
-import './App.css'
+import { useState } from "react";
+import { Navbar } from "./components/Navbar";
+import { Sidebar } from "./components/Sidebar";
+import { ProjectPlanPage } from "./pages/ProjectPlanPage";
+import { ApiTestingPage } from "./pages/ApiTestingPage";
+import { LoadTestingPage } from "./pages/LoadTestingPage";
+import { UiAutomationPage } from "./pages/UiAutomationPage";
+import { WelcomePage } from "./pages/WelcomePage";
+import type { MenuKey } from "./types";
+import "./App.css";
 
 function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [activeKey, setActiveKey] = useState<MenuKey | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeKey, setActiveKey] = useState<MenuKey | null>(null);
 
   const handleSelect = (key: MenuKey) => {
-    setActiveKey(key)
-    setSidebarOpen(false)
-  }
+    setActiveKey(key);
+    setSidebarOpen(false);
+  };
 
   const renderPage = () => {
     switch (activeKey) {
-      case 'project-plan':
-        return <ProjectPlanPage />
-      case 'api-testing':
-        return <ApiTestingPage />
-      case 'load-testing':
-        return <LoadTestingPage />
-      case 'rewind-automation':
-        return <RewindAutomationToolPage />
-      case 'ui-automation':
-        return <UiAutomationToolPage />
+      case "project-plan":
+        return <ProjectPlanPage />;
+      case "api-testing":
+        return <ApiTestingPage />;
+      case "load-testing":
+        return <LoadTestingPage />;
+      case "ui-automation":
+        return <UiAutomationPage />;
       default:
-        return <WelcomePage onSelect={handleSelect} />
     }
-  }
+  };
 
   return (
     <div className="app">
@@ -47,7 +43,7 @@ function App() {
       />
       <main className="content">{renderPage()}</main>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
