@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+aiosqlite
+pydantic-settings
+playwright
+structlog
+httpx
+pytest
+pytest-asyncio

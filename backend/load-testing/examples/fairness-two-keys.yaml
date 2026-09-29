@@ -1,0 +1,37 @@
+# Fairness: two API keys share one global limit, each offering the same demand.
+# Local demo:  lt demo-server --rate 800 --burst 50 --scope global
+# (For a 2000 RPS limit, scale rate/expected_limit_rps up and add processes; a single-process
+# Python demo server tops out around 1-2k RPS.)
+# Keys can come from the environment: LT_KEY_A / LT_KEY_B (values are redacted in artifacts).
+version: 1
+name: fairness-two-keys
+base_url: http://127.0.0.1:8080
+safety:
+  allowlist: [127.0.0.1, localhost]
+  max_rps_cap: 3000
+model:
+  type: open
+  workers: 4
+  processes: 2
+  seed: 7
+  profile:
+    - { duration: 20s, rate: 1000 }
+http:
+  max_connections: 64
+  concurrency: 512
+  warmup_requests: 64
+  warmup_path: /healthz
+routes:
+  - name: tenant-a
+    tenant: key-a
+    path: /api/items
+    headers: { X-API-Key: "${LT_KEY_A:-key-a}" }
+    weight: 1
+  - name: tenant-b
+    tenant: key-b
+    path: /api/items
+    headers: { X-API-Key: "${LT_KEY_B:-key-b}" }
+    weight: 1
+analysis:
+  expected_limit_rps: 800
+  fairness_threshold: 1.2

@@ -1,0 +1,17 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-mono: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+.input {
+  @apply w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100 disabled:text-slate-400;
+}
+
+.label {
+  @apply mb-1 block text-xs font-medium tracking-wide text-slate-500 uppercase;
+}

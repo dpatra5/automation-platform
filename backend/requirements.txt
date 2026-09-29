@@ -1,0 +1,22 @@
+# Jira SprintGuard Dependencies
+
+# Core framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+
+# LLM and ML
+torch>=2.0.0
+transformers>=4.35.0
+
+# JSON parsing and repair
+json-repair>=0.25.0
+
+# Jira integration
+jira>=3.5.0
+
+# Environment and utilities
+python-dotenv>=1.0.0
+
+# Optional: For production
+# gunicorn>=21.0.0

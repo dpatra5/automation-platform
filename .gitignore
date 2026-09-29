@@ -1,24 +1,110 @@
+# ===================== Python =====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtualenv
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+
+# Test / coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.tox/
+.nox/
+
+# ===================== Node / Vite / TypeScript =====================
+node_modules/
+.pnp
+.pnp.*
+
+# Build output
+frontend/dist/
+frontend/build/
+frontend/.vite/
+**/.vite/
+**/vite.config.*.timestamp-*
+
+# TS build info
+*.tsbuildinfo
+frontend/node_modules/.tmp/
+
+# Lint / formatter caches
+.eslintcache
+.oxlintcache
+
 # Logs
-logs
-*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
+*.log
 
+# ===================== Env / secrets =====================
+.env
+.env.*
+!.env.example
+!.env.template
 node_modules
 dist
 dist-ssr
 *.local
+.vite/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# Secrets copied in with the integrated Rewind Automation Tool
+backend/ui-automation/.env
+backend/ui-automation/.venv
+venv/
+.venv/
+backend/ui-automation/app/api/__pycache__
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.egg-info/
+*.py[cod]
+*.db
+*.db-*
+backend/ui-automation/artifacts/
+backend/load-testing/runs/
+backend/api-testing/data/
+.env
+.env.*
+
+# ===================== Editor / OS =====================
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+
+# ===================== Misc =====================
+*.tmp
+
+# Local session cache
+backend/sprintguard/.sessions.json
+

@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-canvas text-ink antialiased;
+  }
+
+  /* Keyboard focus stays visible everywhere; flat design removes most other cues. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary-500/60 ring-offset-2 ring-offset-canvas rounded-lg;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface border border-line rounded-2xl shadow-card;
+  }
+
+  .card-hover {
+    @apply transition-shadow duration-200 hover:shadow-lift;
+  }
+
+  .field {
+    @apply w-full bg-surface border border-line rounded-xl px-3.5 py-2.5 text-sm text-ink
+           placeholder:text-ink-muted/70 transition-colors
+           focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100;
+  }
+
+  .label {
+    @apply block text-xs font-semibold uppercase tracking-wide text-ink-muted mb-1.5;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+           transition-colors disabled:opacity-55 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary-500 text-white hover:bg-primary-600;
+  }
+
+  .btn-secondary {
+    @apply btn bg-surface text-ink-soft border border-line hover:bg-canvas;
+  }
+
+  .btn-ghost {
+    @apply btn text-ink-muted hover:text-ink hover:bg-primary-50;
+  }
+
+  .btn-danger {
+    @apply btn bg-rose-50 text-rose-500 border border-rose-100 hover:bg-rose-100;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold;
+  }
+
+  .mono-chip {
+    @apply font-mono text-[11px] bg-canvas border border-line rounded-md px-1.5 py-0.5 text-ink-soft;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-line rounded-full border-[3px] border-solid border-transparent bg-clip-content;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-ink-muted/40 bg-clip-content;
+}

@@ -1,0 +1,39 @@
+# Capacity discovery: 2k -> 10k RPS in 60 s steps using multiprocessing sharding.
+# Template for a real (allowlisted) staging endpoint; a single-process Python demo server
+# cannot absorb 10k RPS. See docs/SCALING.md for host tuning before running.
+version: 1
+name: step-to-10k
+base_url: https://api.staging.example.com
+default_headers:
+  Accept: application/json
+  X-API-Key: ${LT_API_KEY:-replace-me}
+safety:
+  allowlist: [api.staging.example.com]
+  max_rps_cap: 10000
+  require_allowlist: true
+model:
+  type: open
+  workers: 16
+  processes: 8
+  profile:
+    - { duration: 60s, rate: 2000 }
+    - { duration: 60s, rate: 4000 }
+    - { duration: 60s, rate: 6000 }
+    - { duration: 60s, rate: 8000 }
+    - { duration: 60s, rate: 10000 }
+http:
+  http2: true
+  max_connections: 64
+  max_streams: 100
+  concurrency: 1024
+  connect_timeout: 5s
+  read_timeout: 10s
+routes:
+  - name: items
+    method: GET
+    path: /api/items
+    expect_status: [200, 429]
+analysis:
+  warmup_windows: 2
+  knee_429_threshold: 0.02
+  knee_marginal_threshold: 0.5
