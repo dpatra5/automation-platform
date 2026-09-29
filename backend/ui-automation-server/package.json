@@ -1,0 +1,12 @@
+{
+  "name": "ui-automation-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "automation-platform": "file:../..",
+    "playwright": "^1.55.0"
+  }
+}

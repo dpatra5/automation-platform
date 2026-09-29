@@ -91,6 +91,7 @@ htmlcov/
 backend/ui-automation/artifacts/
 backend/load-testing/runs/
 backend/api-testing/data/
+backend/ui-automation-server/data/
 .env
 .env.*
 
