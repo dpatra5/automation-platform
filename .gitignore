@@ -14,11 +14,11 @@ dist-ssr
 .vite/
 
 # Secrets copied in with the integrated Rewind Automation Tool
-tools/ui-automation/backend/.env
-tools/ui-automation/backend/.venv
+backend/ui-automation/.env
+backend/ui-automation/.venv
 venv/
 .venv/
-tools/ui-automation/backend/app/api/__pycache__
+backend/ui-automation/app/api/__pycache__
 __pycache__/
 .pytest_cache/
 .mypy_cache/
@@ -33,11 +33,9 @@ htmlcov/
 *.py[cod]
 *.db
 *.db-*
-tools/ui-automation/backend/artifacts/
-tools/load-testing/backend/runs/
-tools/load-testing/runs/
-tools/api-testing/backend/data/
-tools/ui-automation-server/data/
+backend/ui-automation/artifacts/
+backend/load-testing/runs/
+backend/api-testing/data/
 .env
 .env.*
 
