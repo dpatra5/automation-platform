@@ -10,6 +10,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    // Inline config stops Vite from picking up the shell's Tailwind v3 postcss.config.js.
+    css: { postcss: {} },
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },

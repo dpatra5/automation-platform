@@ -12,19 +12,17 @@ export default defineConfig({
     middlewareMode: false,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8003',
         changeOrigin: true,
       },
       // Screenshots, video, trace and log files are served by the backend.
       '/artifacts': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8003',
         changeOrigin: true,
       },
     },
   },
-  preview: {
-    middlewareMode: false,
-  },
+  preview: {},
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

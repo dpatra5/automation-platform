@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./rewind.db"
-    base_url: str = "http://localhost:8000"
+    base_url: str = "http://localhost:8003"
     # Used for the deep links Rewind writes into Jira comments.
     dashboard_url: str = "http://localhost:5173"
     artifacts_dir: str = "artifacts"

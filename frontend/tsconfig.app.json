@@ -21,5 +21,11 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tool UIs under components/<tool>/ are standalone Vite apps with their own tsconfig.
+  "exclude": [
+    "src/components/load-testing",
+    "src/components/api-testing",
+    "src/components/ui-automation"
+  ]
 }

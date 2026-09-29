@@ -4,14 +4,18 @@
   "version": "0.0.0",
   "description": "Centralized launcher for the Automation Platform (frontend + all backend services).",
   "scripts": {
-    "frontend": "npm --prefix frontend run dev",
+    "frontend": "concurrently -n shell,load-testing-ui,api-testing-ui,ui-automation-ui -c green,magenta,green,yellow \"npm:frontend:shell\" \"npm:frontend:load-testing\" \"npm:frontend:api-testing\" \"npm:frontend:ui-automation\"",
+    "frontend:shell": "npm --prefix frontend run dev",
+    "frontend:load-testing": "npm --prefix frontend/src/components/load-testing run dev",
+    "frontend:api-testing": "npm --prefix frontend/src/components/api-testing run dev",
+    "frontend:ui-automation": "npm --prefix frontend/src/components/ui-automation run dev",
     "backend": "concurrently -n sprintguard,load-testing,api-testing,ui-automation -c cyan,magenta,green,yellow \"npm:backend:sprintguard\" \"npm:backend:load-testing\" \"npm:backend:api-testing\" \"npm:backend:ui-automation\"",
-    "backend:sprintguard": "cross-env API_HOST=127.0.0.1 API_PORT=8000 python -m uvicorn backend.sprintguard.main:app --host 127.0.0.1 --port 8000 --reload",
-    "backend:load-testing": "cross-env PYTHONPATH=backend/load-testing/src python -m uvicorn lt.api.app:create_app --factory --host 127.0.0.1 --port 8001 --reload",
-    "backend:api-testing": "cross-env PYTHONPATH=backend/api-testing APIT_PORT=8002 python -m uvicorn apitest.main:create_app --factory --host 127.0.0.1 --port 8002 --reload",
-    "backend:ui-automation": "cross-env PYTHONPATH=backend/ui-automation python -m uvicorn app.main:app --host 127.0.0.1 --port 8003 --reload",
+    "backend:sprintguard": "cross-env API_HOST=127.0.0.1 API_PORT=8000 python -m uvicorn backend.sprintguard.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir backend/sprintguard",
+    "backend:load-testing": "cross-env PYTHONPATH=backend/load-testing/src python -m uvicorn lt.api.app:create_app --factory --host 127.0.0.1 --port 8001 --reload --reload-dir backend/load-testing/src",
+    "backend:api-testing": "cross-env PYTHONPATH=backend/api-testing APIT_PORT=8002 python -m uvicorn apitest.main:create_app --factory --host 127.0.0.1 --port 8002 --reload --reload-dir backend/api-testing/apitest",
+    "backend:ui-automation": "cross-env PYTHONPATH=backend/ui-automation BASE_URL=http://localhost:8003 DASHBOARD_URL=http://localhost:5174 python -m uvicorn app.main:app --host 127.0.0.1 --port 8003 --reload --reload-dir backend/ui-automation/app",
     "dev": "concurrently -n backend,frontend -c blue,green \"npm run backend\" \"npm run frontend\"",
-    "install:all": "npm install && npm --prefix frontend install && python -m pip install -r backend/requirements.txt -r backend/api-testing/requirements.txt -r backend/load-testing/requirements.txt -r backend/ui-automation/requirements.txt"
+    "install:all": "npm install && npm --prefix frontend install && npm --prefix frontend/src/components/load-testing ci && npm --prefix frontend/src/components/api-testing ci && npm --prefix frontend/src/components/ui-automation ci && python -m pip install -r backend/requirements.txt -r backend/api-testing/requirements.txt -r backend/ui-automation/requirements.txt -e \"backend/load-testing[dev]\" && python -m playwright install chromium"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

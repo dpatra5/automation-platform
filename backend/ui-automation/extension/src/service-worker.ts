@@ -2,7 +2,7 @@ import type { AssertionOption, RecordedStep, RecordingState } from "./types";
 
 // Kept local, not imported: see the note in types.ts.
 const DASHBOARD_ORIGINS = ["http://localhost:5173", "http://localhost:5174"];
-const BACKEND_URL = "http://localhost:8000";
+const BACKEND_URL = "http://localhost:8003";
 
 /**
  * Enough of the check catalogue to keep the recorder usable when the backend

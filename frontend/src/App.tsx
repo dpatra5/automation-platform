@@ -29,6 +29,7 @@ function App() {
       case "ui-automation":
         return <UiAutomationPage />;
       default:
+        return <WelcomePage onSelect={handleSelect} />;
     }
   };
 
