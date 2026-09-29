@@ -1,0 +1,20 @@
+{
+  "name": "automation-platform",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Centralized launcher for the Automation Platform (frontend + all backend services).",
+  "scripts": {
+    "frontend": "npm --prefix frontend run dev",
+    "backend": "concurrently -n sprintguard,load-testing,api-testing,ui-automation -c cyan,magenta,green,yellow \"npm:backend:sprintguard\" \"npm:backend:load-testing\" \"npm:backend:api-testing\" \"npm:backend:ui-automation\"",
+    "backend:sprintguard": "cross-env API_HOST=127.0.0.1 API_PORT=8000 python -m uvicorn backend.sprintguard.main:app --host 127.0.0.1 --port 8000 --reload",
+    "backend:load-testing": "cross-env PYTHONPATH=backend/load-testing/src python -m uvicorn lt.api.app:create_app --factory --host 127.0.0.1 --port 8001 --reload",
+    "backend:api-testing": "cross-env PYTHONPATH=backend/api-testing APIT_PORT=8002 python -m uvicorn apitest.main:create_app --factory --host 127.0.0.1 --port 8002 --reload",
+    "backend:ui-automation": "cross-env PYTHONPATH=backend/ui-automation python -m uvicorn app.main:app --host 127.0.0.1 --port 8003 --reload",
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run backend\" \"npm run frontend\"",
+    "install:all": "npm install && npm --prefix frontend install && python -m pip install -r backend/requirements.txt -r backend/api-testing/requirements.txt -r backend/load-testing/requirements.txt -r backend/ui-automation/requirements.txt"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3"
+  }
+}
