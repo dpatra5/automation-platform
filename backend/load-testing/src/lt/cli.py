@@ -434,19 +434,24 @@ def _run_discovery(
     return result
 
 
+def _skip_reason(ep: Endpoint, include_unsafe: bool) -> str | None:
+    if not ep.in_scope:
+        return "out of scope"
+    if ep.sensitive:
+        return "auth-related"
+    if not (ep.safe or include_unsafe):
+        return "unsafe method; --include-unsafe"
+    return None
+
+
 def _select(result: DiscoveryResult, include_unsafe: bool) -> list[Endpoint]:
     click.echo(f"\n{len(result.pages)} page(s) crawled, {len(result.endpoints)} API call(s) seen")
     chosen = []
     for ep in result.endpoints:
-        use = ep.in_scope and not ep.sensitive and (ep.safe or include_unsafe)
-        flag = "+" if use else "-"
-        why = "" if use else (
-            " (out of scope)" if not ep.in_scope
-            else " (auth-related)" if ep.sensitive
-            else " (unsafe method; --include-unsafe)"
-        )  # fmt: skip
+        reason = _skip_reason(ep, include_unsafe)
+        flag, why = ("+", "") if reason is None else ("-", f" ({reason})")
         click.echo(f"  {flag} {ep.method:<7} {ep.base_url}{ep.template}  x{ep.count}{why}")
-        if use:
+        if reason is None:
             chosen.append(ep)
     if result.out_of_scope_hosts:
         hosts = ", ".join(result.out_of_scope_hosts)
@@ -509,7 +514,7 @@ def discover_cmd(
 @click.option("--output-dir", default="runs", show_default=True, type=click.Path(file_okay=False))
 @click.option("--strict", is_flag=True, help="Exit 1 if any run's analysis fails (CI gate).")
 def scan_cmd(
-    url: str, max_pages: int, max_depth: int, wait_ms: int, scope: tuple[str, ...],
+    url: str, max_pages: int, max_depth: int, wait_ms: int, scope: tuple[str, ...],  # NOSONAR
     headers: tuple[str, ...], ignore_https_errors: bool, include_unsafe: bool, mode: str,
     rate: float, duration: str, expected_limit: float | None, output_dir: str, strict: bool,
 ) -> None:  # fmt: skip

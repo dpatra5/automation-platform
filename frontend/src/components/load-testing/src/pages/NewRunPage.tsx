@@ -1,10 +1,9 @@
-import { ChevronDown, FileCode2, FileUp, Play, RotateCcw, ShieldCheck } from 'lucide-react';
-import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { ChevronDown, FileUp, Play, RotateCcw, ShieldCheck } from 'lucide-react';
+import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 
 import { ConfigEditor } from '@/components/ConfigEditor';
 import { PageHeader } from '@/components/layout/AppLayout';
-import { QuickTestForm } from '@/components/QuickTestForm';
 import { ProfileChart } from '@/components/RunCharts';
 import { Alert, ErrorAlert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
@@ -13,18 +12,13 @@ import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Field, Input, Select, Toggle } from '@/components/ui/Field';
 import { Spinner } from '@/components/ui/Spinner';
-import { Tabs } from '@/components/ui/Tabs';
 import { useExamples, useStartRun, useValidation } from '@/hooks/queries';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDuration, formatInt, formatRps } from '@/lib/format';
-import type { ConfigSummary, Overrides } from '@/lib/types';
+import type { ConfigSummary, Overrides, RouteSummary } from '@/lib/types';
 
 const MAX_UPLOAD_BYTES = 256 * 1024;
-const MAX_JMX_BYTES = 5 * 1024 * 1024;
-
-type Mode = 'quick' | 'yaml';
 
 const STARTER = `version: 1
 name: my-first-run
@@ -73,24 +67,45 @@ function toOverrides(f: OverrideForm): Overrides {
   };
 }
 
-function SummaryPanel({ summary, warnings }: { summary: ConfigSummary; warnings: string[] }) {
+function routeDetail(r: RouteSummary, closed: boolean): string {
+  if (!closed) {
+    const tenant = r.tenant ? `${r.tenant} · ` : '';
+    return `${tenant}w=${r.weight}`;
+  }
+  const parts: string[] = [];
+  if (r.checks) parts.push(`${r.checks} check${r.checks > 1 ? 's' : ''}`);
+  if (r.extracts?.length) parts.push(`→ ${r.extracts.join(', ')}`);
+  return parts.join(' · ');
+}
+
+function SummaryPanel({
+  summary,
+  warnings,
+}: Readonly<{ summary: ConfigSummary; warnings: string[] }>) {
   const closed = summary.model_type === 'closed';
   const rows: [string, string][] = closed
     ? [
         ['Target', summary.base_url],
         ['Virtual users', `${formatInt(summary.peak_users)} peak`],
         ['Duration', formatDuration(summary.duration_s)],
-        ...(summary.iterations ? [['Iterations', `${summary.iterations} per user`] as [string, string]] : []),
+        ...(summary.iterations
+          ? [['Iterations', `${summary.iterations} per user`] as [string, string]]
+          : []),
         [
           'Throughput cap',
-          summary.max_rps ? `${formatRps(summary.max_rps)} rps` : `safety cap ${formatInt(summary.effective_cap)} rps`,
+          summary.max_rps
+            ? `${formatRps(summary.max_rps)} rps`
+            : `safety cap ${formatInt(summary.effective_cap)} rps`,
         ],
         ['Test data', summary.data_rows ? `${formatInt(summary.data_rows)} rows` : 'none'],
         ['Pass/fail checks', summary.thresholds ? `${summary.thresholds} threshold(s)` : 'none'],
       ]
     : [
         ['Target', summary.base_url],
-        ['Peak rate', `${formatRps(summary.peak_rps)} rps (cap ${formatInt(summary.effective_cap)})`],
+        [
+          'Peak rate',
+          `${formatRps(summary.peak_rps)} rps (cap ${formatInt(summary.effective_cap)})`,
+        ],
         ['Duration', formatDuration(summary.duration_s)],
         ['Expected requests', `~${formatInt(summary.expected_requests)}`],
         [
@@ -127,7 +142,10 @@ function SummaryPanel({ summary, warnings }: { summary: ConfigSummary; warnings:
         <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
           {closed ? 'Virtual users over time' : 'Target rate'}
         </p>
-        <ProfileChart steps={closed ? userSteps : summary.profile} unit={closed ? 'users' : 'rps'} />
+        <ProfileChart
+          steps={closed ? userSteps : summary.profile}
+          unit={closed ? 'users' : 'rps'}
+        />
       </div>
       <div>
         <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -143,14 +161,7 @@ function SummaryPanel({ summary, warnings }: { summary: ConfigSummary; warnings:
                 {r.path}
               </span>
               <span className="ml-auto shrink-0 text-xs text-slate-500 dark:text-slate-400">
-                {closed
-                  ? [
-                      r.checks ? `${r.checks} check${r.checks > 1 ? 's' : ''}` : null,
-                      r.extracts?.length ? `→ ${r.extracts.join(', ')}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')
-                  : `${r.tenant ? `${r.tenant} · ` : ''}w=${r.weight}`}
+                {routeDetail(r, closed)}
               </span>
             </li>
           ))}
@@ -179,6 +190,19 @@ export function NewRunPage() {
   const pending = debouncedReq !== req || validation.isFetching;
   const result = validation.data;
   const canStart = !pending && result?.valid === true && !start.isPending;
+
+  let validationBadge: ReactNode = null;
+  if (pending) {
+    validationBadge = <Spinner className="size-4 text-slate-400" label="Validating" />;
+  } else if (result?.valid) {
+    validationBadge = (
+      <Badge tone="success">
+        <ShieldCheck className="size-3" /> Valid
+      </Badge>
+    );
+  } else if (result) {
+    validationBadge = <Badge tone="danger">Invalid</Badge>;
+  }
 
   const set = <K extends keyof OverrideForm>(key: K, value: OverrideForm[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -268,7 +292,7 @@ export function NewRunPage() {
                 value={yaml}
                 onChange={setYaml}
                 invalid={result?.valid === false && !pending}
-                className="h-[480px]"
+                className="h-120"
               />
             </CardBody>
           </Card>
@@ -346,20 +370,7 @@ export function NewRunPage() {
 
         <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
           <Card>
-            <CardHeader
-              title="Pre-flight check"
-              actions={
-                pending ? (
-                  <Spinner className="size-4 text-slate-400" label="Validating" />
-                ) : result?.valid ? (
-                  <Badge tone="success">
-                    <ShieldCheck className="size-3" /> Valid
-                  </Badge>
-                ) : result ? (
-                  <Badge tone="danger">Invalid</Badge>
-                ) : null
-              }
-            />
+            <CardHeader title="Pre-flight check" actions={validationBadge} />
             <CardBody className="space-y-4">
               <ErrorAlert error={validation.error} title="Validation unavailable" />
               {result && !result.valid && (

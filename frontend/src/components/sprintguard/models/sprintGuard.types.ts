@@ -22,12 +22,14 @@ export type SessionState =
 // Step 1: Summary Data
 // =====================================================================
 
+export type Level = 'Low' | 'Medium' | 'High';
+
 export interface SummaryData {
   summary: string;
   key_points: string[];
   suggested_scope: string;
   potential_challenges: string[];
-  estimated_complexity: 'Low' | 'Medium' | 'High';
+  estimated_complexity: Level;
 }
 
 // =====================================================================
@@ -47,7 +49,8 @@ export interface StoryDescriptionData {
 // =====================================================================
 
 export interface ProjectOverview {
-  complexity: 'Low' | 'Medium' | 'High' | string;
+  /** Usually a `Level`, but the LLM may return free text. */
+  complexity: string;
   estimated_duration: string;
   total_work_hours: string;
   resource_count: string;
@@ -121,7 +124,7 @@ export interface StoryDetails {
   description: string;
   acceptance_criteria: string[];
   story_points: number;
-  priority: 'High' | 'Medium' | 'Low';
+  priority: Level;
   labels: string[];
   components: string[];
 }
@@ -130,8 +133,9 @@ export interface Task {
   taskId: string;
   title: string;
   description: string;
-  type: 'Frontend' | 'Backend' | 'Database' | 'API' | 'Testing' | 'Documentation' | string;
-  priority: 'High' | 'Medium' | 'Low';
+  /** e.g. Frontend, Backend, Database, API, Testing, Documentation. */
+  type: string;
+  priority: Level;
   estimate: string;
 }
 
@@ -156,8 +160,9 @@ export interface TestCase {
   preCondition: string;
   steps: string[];
   expectedResult: string;
-  priority: 'High' | 'Medium' | 'Low';
-  type: 'Positive' | 'Negative' | 'Boundary' | 'Validation' | 'UI' | string;
+  priority: Level;
+  /** e.g. Positive, Negative, Boundary, Validation, UI. */
+  type: string;
 
   // Automation-ready fields (optional so legacy backends keep working).
   requirementId?: string;

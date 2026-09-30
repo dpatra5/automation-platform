@@ -72,10 +72,10 @@ const priorityConfig = {
 function TestCaseCard({
   testCase,
   index,
-}: {
+}: Readonly<{
   testCase: TestCase;
   index: number;
-}) {
+}>) {
   const [expanded, setExpanded] = useState(index === 0);
   const typeStyle = typeConfig[testCase.type] || typeConfig.Positive;
   const TypeIcon = typeStyle.icon;
@@ -314,13 +314,13 @@ function KPICard({
   icon: Icon,
   bgColor,
   textColor,
-}: {
+}: Readonly<{
   title: string;
   value: number;
   icon: React.ComponentType<{ className?: string }>;
   bgColor: string;
   textColor: string;
-}) {
+}>) {
   return (
     <div className={`${bgColor} rounded-xl p-4 border border-white/20`}>
       <div className="flex items-center justify-between">
@@ -346,7 +346,7 @@ export function TestCasesReview({
   onApprove,
   onModify,
   isReadOnly = false,
-}: TestCasesReviewProps) {
+}: Readonly<TestCasesReviewProps>) {
   const cases = testCases.test_cases || [];
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<string>("all");

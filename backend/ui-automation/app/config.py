@@ -76,6 +76,8 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        # A .env shared with other services (e.g. SprintGuard's) must not crash startup.
+        extra = "ignore"
 
 
 settings = Settings()

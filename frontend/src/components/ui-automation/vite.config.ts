@@ -1,12 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { fileURLToPath, URL } from 'node:url';
 
 // https://vitejs.dev/config/
 export default defineConfig({
   appType: 'spa',
   plugins: [react()],
-  cacheDir: path.resolve(__dirname, '../../../node_modules/.vite/ui-automation'),
+  cacheDir: fileURLToPath(new URL('../../../node_modules/.vite/ui-automation', import.meta.url)),
   server: {
     port: 5174,
     strictPort: true,
@@ -26,7 +26,7 @@ export default defineConfig({
   preview: {},
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
 });

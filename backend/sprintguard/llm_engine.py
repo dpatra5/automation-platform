@@ -129,52 +129,50 @@ def remove_trailing_commas(text: str) -> str:
     return text
 
 
+class _JsonScanner:
+    """Tracks whether a character-by-character scan is inside a JSON string literal."""
+
+    def __init__(self) -> None:
+        self.in_string = False
+        self._escape_next = False
+
+    def is_structural(self, char: str) -> bool:
+        """Consume one character; True if it is outside a string and not a quote or escape."""
+        if self._escape_next:
+            self._escape_next = False
+            return False
+        if char == '\\':
+            self._escape_next = True
+            return False
+        if char == '"':
+            self.in_string = not self.in_string
+            return False
+        return not self.in_string
+
+
 def _extract_json_with_brace_balancing(text: str) -> Optional[str]:
     """
     Extract JSON object using brace balancing.
     More robust than regex for truncated or malformed JSON.
     """
-    # Find the first opening brace
     start = text.find('{')
     if start == -1:
         return None
-    
+
+    scanner = _JsonScanner()
     depth = 0
-    in_string = False
-    escape_next = False
-    end = start
-    
     for i, char in enumerate(text[start:], start):
-        if escape_next:
-            escape_next = False
+        if not scanner.is_structural(char):
             continue
-            
-        if char == '\\':
-            escape_next = True
-            continue
-            
-        if char == '"' and not escape_next:
-            in_string = not in_string
-            continue
-            
-        if in_string:
-            continue
-            
         if char == '{':
             depth += 1
         elif char == '}':
             depth -= 1
             if depth == 0:
-                end = i + 1
-                return text[start:end]
-    
-    # If we exit the loop without finding balanced braces,
-    # the JSON is truncated - try to repair it
-    if depth > 0:
-        # Return the partial JSON for repair attempt
-        return text[start:]
-    
-    return None
+                return text[start:i + 1]
+
+    # Braces never balanced: the JSON is truncated, so hand back the tail for repair.
+    return text[start:]
 
 
 def _repair_truncated_json(text: str) -> Optional[str]:
@@ -183,51 +181,24 @@ def _repair_truncated_json(text: str) -> Optional[str]:
     """
     if not text:
         return None
-    
-    # Count unclosed braces and brackets
-    depth_brace = 0
-    depth_bracket = 0
-    in_string = False
-    escape_next = False
-    
+
+    scanner = _JsonScanner()
+    depth = {'{': 0, '[': 0}
+    openers = {'}': '{', ']': '['}
     for char in text:
-        if escape_next:
-            escape_next = False
+        if not scanner.is_structural(char):
             continue
-        if char == '\\':
-            escape_next = True
-            continue
-        if char == '"' and not escape_next:
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if char == '{':
-            depth_brace += 1
-        elif char == '}':
-            depth_brace -= 1
-        elif char == '[':
-            depth_bracket += 1
-        elif char == ']':
-            depth_bracket -= 1
-    
-    # If we're inside an unclosed string, try to close it
-    if in_string:
-        text = text.rstrip()
-        # Remove incomplete string value
-        if text.endswith(','):
-            text = text[:-1]
+        if char in depth:
+            depth[char] += 1
+        elif char in openers:
+            depth[openers[char]] -= 1
+
+    text = text.rstrip().removesuffix(',')
+    if scanner.in_string:
         text += '"'
-    
-    # Remove trailing comma if present
-    text = text.rstrip()
-    if text.endswith(','):
-        text = text[:-1]
-    
-    # Close unclosed brackets and braces
-    text += ']' * max(0, depth_bracket)
-    text += '}' * max(0, depth_brace)
-    
+
+    text += ']' * max(0, depth['['])
+    text += '}' * max(0, depth['{'])
     return text
 
 
@@ -247,6 +218,32 @@ def _try_json_repair_library(text: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _parse_balanced_candidate(candidate: str) -> Optional[Dict[str, Any]]:
+    """Parse a brace-balanced candidate, falling back to built-in then library repair."""
+    candidate = remove_trailing_commas(candidate)
+    try:
+        result = json.loads(candidate)
+        logger.info("JSON parsed successfully with brace-balancing")
+        return result
+    except json.JSONDecodeError as e:
+        logger.warning(f"Brace-balanced JSON invalid: {e}")
+
+    repaired = _repair_truncated_json(candidate)
+    if repaired:
+        try:
+            result = json.loads(remove_trailing_commas(repaired))
+            logger.info("JSON parsed successfully after built-in repair")
+            return result
+        except json.JSONDecodeError as e:
+            logger.warning(f"Built-in repair failed: {e}")
+
+    result = _try_json_repair_library(candidate)
+    if result:
+        logger.info("JSON parsed successfully with json_repair library")
+        return result
+    return None
+
+
 def extract_first_json_object(text: str) -> Optional[Dict[str, Any]]:
     """
     Extract the first valid JSON object from text using multiple strategies:
@@ -264,40 +261,14 @@ def extract_first_json_object(text: str) -> Optional[Dict[str, Any]]:
     
     # Remove markdown code fences if present
     text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.MULTILINE)
-    text = re.sub(r'\s*```\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'```[ \t]*$', '', text, flags=re.MULTILINE)
     text = text.strip()
     
-    # Strategy 1: Try brace-balancing extraction
     candidate = _extract_json_with_brace_balancing(text)
-    
     if candidate:
-        # Clean up the candidate
-        candidate = remove_trailing_commas(candidate)
-        
-        # Try to parse directly
-        try:
-            result = json.loads(candidate)
-            logger.info("JSON parsed successfully with brace-balancing")
+        result = _parse_balanced_candidate(candidate)
+        if result is not None:
             return result
-        except json.JSONDecodeError as e:
-            logger.warning(f"Brace-balanced JSON invalid: {e}")
-            
-            # Strategy 2: Try built-in repair
-            repaired = _repair_truncated_json(candidate)
-            if repaired:
-                repaired = remove_trailing_commas(repaired)
-                try:
-                    result = json.loads(repaired)
-                    logger.info("JSON parsed successfully after built-in repair")
-                    return result
-                except json.JSONDecodeError as e2:
-                    logger.warning(f"Built-in repair failed: {e2}")
-            
-            # Strategy 3: Try json_repair library
-            result = _try_json_repair_library(candidate)
-            if result:
-                logger.info("JSON parsed successfully with json_repair library")
-                return result
     
     # Strategy 4: Fallback to simple regex (last resort)
     match = re.search(r"\{[\s\S]*\}", text)
