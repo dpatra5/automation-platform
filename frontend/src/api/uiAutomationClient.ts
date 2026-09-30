@@ -3,27 +3,97 @@ const CONTROLLER_URL = import.meta.env.VITE_UI_AUTOMATION_CONTROLLER_URL ?? 'htt
 export interface UiAutomationSession {
   id: string
   flowName: string
+  testSlug?: string
   status: 'starting' | 'recording' | 'paused' | 'stopped' | 'error'
   eventCount: number
   currentUrl: string
-  actions?: Array<{ action: string; pageUrl: string; text?: string; value?: string }>
+  dialogPolicy?: 'accept' | 'dismiss'
+  openTabs?: number
+  actions?: Array<{ action: string; pageUrl: string; tab?: number; text?: string; value?: string; xpath?: string }>
 }
 
 export interface ReplayResult {
   index: number
   action: string
+  description?: string
   pageUrl: string
-  status: 'passed' | 'failed'
+  status: 'passed' | 'failed' | 'skipped'
   message: string
+  checks?: string[]
+  locator?: string
+  tab?: number
 }
 
 export interface ReplaySession {
   id: string
   flowId: string
+  testSlug?: string
   status: 'running' | 'passed' | 'failed'
   browser: string
   results: ReplayResult[]
   browserOpen?: boolean
+  healedSteps?: number
+}
+
+export type BrowserName = 'chromium' | 'firefox' | 'webkit'
+
+export interface TestRun {
+  id: string
+  status: 'passed' | 'failed' | 'running'
+  browser: string
+  at: string
+  passed: number
+  failed: number
+  healedSteps: number
+}
+
+export interface TestSummary {
+  slug: string
+  name: string
+  url: string
+  flowId: string
+  createdAt: string
+  updatedAt: string
+  lastRun: TestRun | null
+  stepCount: number
+  pageCount: number
+  elementCount: number
+}
+
+export interface TestComponent {
+  kind: string
+  root: string | null
+  frame: string[] | null
+  elements: Record<string, string>
+}
+
+export interface TestPage {
+  file: string
+  path: string
+  elements: Record<string, string>
+  components: Record<string, TestComponent>
+}
+
+export interface TestStep {
+  step: number
+  action: string
+  description: string
+  tab?: number
+  page?: string
+  component?: string
+  element?: string
+  hover?: string[]
+  expectedText?: string
+  xpath?: string
+  value?: string
+  key?: string
+  url?: string
+}
+
+export interface TestDetail extends Omit<TestSummary, 'stepCount' | 'pageCount' | 'elementCount'> {
+  history: TestRun[]
+  pages: Record<string, TestPage>
+  flow: TestStep[]
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -43,11 +113,18 @@ export const uiAutomationClient = {
     }),
   status: (id: string) => request<UiAutomationSession>(`/api/sessions/${id}`),
   stop: (id: string) => request<UiAutomationSession>(`/api/sessions/${id}/stop`, { method: 'POST' }),
-  replay: (id: string, browser: 'chromium' | 'firefox' | 'webkit', data: Record<string, string>) =>
+  replay: (id: string, browser: BrowserName, data: Record<string, string>) =>
     request<{ id: string; status: string; browser: string }>(`/api/flows/${id}/replay`, {
       method: 'POST',
       body: JSON.stringify({ browser, data }),
     }),
   replayStatus: (id: string) => request<ReplaySession>(`/api/replays/${id}`),
   closeReplay: (id: string) => request<{ id: string; status: string; browserOpen: boolean }>(`/api/replays/${id}/close`, { method: 'POST' }),
+  listTests: () => request<TestSummary[]>('/api/tests'),
+  getTest: (slug: string) => request<TestDetail>(`/api/tests/${encodeURIComponent(slug)}`),
+  runTest: (slug: string, browser: BrowserName, data: Record<string, string>) =>
+    request<{ id: string; status: string; browser: string }>(`/api/tests/${encodeURIComponent(slug)}/replay`, {
+      method: 'POST',
+      body: JSON.stringify({ browser, data }),
+    }),
 }

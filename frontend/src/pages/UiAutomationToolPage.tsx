@@ -1,20 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { uiAutomationClient, type ReplaySession, type UiAutomationSession } from '../api/uiAutomationClient'
+import { uiAutomationClient, type UiAutomationSession } from '../api/uiAutomationClient'
+import { ReplayRunner } from './ui-automation-tool/ReplayRunner'
+import { TestLibrary } from './ui-automation-tool/TestLibrary'
 
 type RunState = UiAutomationSession['status'] | 'idle'
 
 export function UiAutomationToolPage() {
+  const [view, setView] = useState<'record' | 'library'>('record')
+  const [librarySlug, setLibrarySlug] = useState<string | null>(null)
   const [url, setUrl] = useState('')
   const [flowName, setFlowName] = useState('')
   const [runState, setRunState] = useState<RunState>('idle')
   const [session, setSession] = useState<UiAutomationSession | null>(null)
   const [error, setError] = useState('')
-  const [browser, setBrowser] = useState<'chromium' | 'firefox' | 'webkit'>('chromium')
-  const [testData, setTestData] = useState('')
-  const [replayStatus, setReplayStatus] = useState('')
-  const [replay, setReplay] = useState<ReplaySession | null>(null)
   const poller = useRef<number | null>(null)
-  const controller = import.meta.env.VITE_UI_AUTOMATION_CONTROLLER_URL ?? 'http://127.0.0.1:8001'
+  const controller = import.meta.env.VITE_UI_AUTOMATION_CONTROLLER_URL ?? 'http://127.0.0.1:8004'
 
   useEffect(() => () => {
     if (poller.current) window.clearInterval(poller.current)
@@ -44,7 +44,7 @@ export function UiAutomationToolPage() {
       poll(started.id)
     } catch {
       setRunState('error')
-      setError('Could not start Playwright. Start the UI Automation controller on port 8001.')
+      setError('Could not start Playwright. Start the UI Automation controller on port 8004.')
     }
   }
 
@@ -64,31 +64,9 @@ export function UiAutomationToolPage() {
     if (poller.current) window.clearInterval(poller.current)
   }
 
-  const replayFlow = async () => {
-    if (!session) return
-    setReplayStatus('Starting replay…')
-    try {
-      const data = Object.fromEntries(testData.split('\n').map((line) => line.split('=').map((part) => part.trim())).filter(([key, value]) => key && value))
-      const started = await uiAutomationClient.replay(session.id, browser, data)
-      setReplayStatus(`Replay started in ${browser}.`)
-      const replayId = started.id
-      const replayPoller = window.setInterval(async () => {
-        const next = await uiAutomationClient.replayStatus(replayId)
-        setReplay(next)
-        if (next.status !== 'running') {
-          window.clearInterval(replayPoller)
-          setReplayStatus(next.status === 'passed' ? 'Replay completed successfully.' : 'Replay completed with failures.')
-        }
-      }, 1000)
-    } catch {
-      setReplayStatus('Replay could not start. Check that the controller is running.')
-    }
-  }
-
-  const closeReplay = async () => {
-    if (!replay) return
-    await uiAutomationClient.closeReplay(replay.id)
-    setReplay((current) => current ? { ...current, browserOpen: false } : current)
+  const openInLibrary = (slug?: string) => {
+    setLibrarySlug(slug ?? null)
+    setView('library')
   }
 
   const statusLabel = runState === 'starting' ? 'Starting Playwright…' : runState === 'recording' ? 'Recording' : runState === 'paused' ? 'Paused' : runState === 'stopped' ? 'Recording saved' : runState === 'error' ? 'Controller unavailable' : 'Not started'
@@ -99,18 +77,24 @@ export function UiAutomationToolPage() {
         <div>
           <span className="tool-eyebrow">Independent Playwright tool</span>
           <h1>UI Automation</h1>
-          <p className="page-description">Start a visible Playwright browser, authenticate once if needed, record every action and DOM snapshot, follow new tabs automatically, then replay the saved flow across browsers and test data.</p>
+          <p className="page-description">Start a visible Playwright browser, record every action with relative XPaths, follow popups, new tabs, dialogs, modals and iframes, then save the flow as a named test you can re-run from the test library.</p>
         </div>
         <div className="tool-page-mark">🎯</div>
       </div>
 
+      <div className="ui-tool-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={view === 'record'} className={`ui-tool-tab${view === 'record' ? ' active' : ''}`} onClick={() => setView('record')}>Record</button>
+        <button type="button" role="tab" aria-selected={view === 'library'} className={`ui-tool-tab${view === 'library' ? ' active' : ''}`} onClick={() => openInLibrary()}>Test library</button>
+      </div>
+
+      {view === 'library' ? <TestLibrary key={librarySlug ?? 'list'} initialSlug={librarySlug} /> : <>
       <div className="ui-tool-layout">
         <section className="tool-panel">
-          <h2>New flow</h2>
-          <p className="panel-copy">The recorder toolbar is injected into every page opened by the Playwright context, including new tabs and windows.</p>
+          <h2>New test</h2>
+          <p className="panel-copy">Use the application normally; the recorder keeps what you do (clicks, typing, selections, tabs, back/forward, dialogs), not mouse movement or scrolling. Use the toolbar's <strong>Verify</strong> button, then click an element, to add a check. <strong>Dialogs</strong> chooses whether alert/confirm/prompt dialogs are accepted or dismissed.</p>
           <label className="field-label" htmlFor="automation-url">Application URL</label>
           <input id="automation-url" className="text-input" type="url" placeholder="https://example.com" value={url} onChange={(event) => setUrl(event.target.value)} disabled={runState === 'recording' || runState === 'paused'} />
-          <label className="field-label" htmlFor="flow-name">Flow name</label>
+          <label className="field-label" htmlFor="flow-name">Test name</label>
           <input id="flow-name" className="text-input" type="text" placeholder="Checkout validation" value={flowName} onChange={(event) => setFlowName(event.target.value)} disabled={runState === 'recording' || runState === 'paused'} />
           <div className="tool-actions">
             <button type="button" className="run-btn" disabled={!url.trim() || !flowName.trim() || ['starting', 'recording', 'paused'].includes(runState)} onClick={startFlow}>Start recording</button>
@@ -123,38 +107,28 @@ export function UiAutomationToolPage() {
 
         <aside className="tool-panel tool-status-card">
           <span className={`flow-status flow-status-${runState}`}>{statusLabel}</span>
-          <h2>{flowName || 'Your flow'}</h2>
+          <h2>{flowName || 'Your test'}</h2>
           <ul className="flow-checklist">
             <li className={runState !== 'idle' && runState !== 'error' ? 'check-done' : ''}>Playwright browser started</li>
-            <li className={['recording', 'paused', 'stopped'].includes(runState) ? 'check-done' : ''}>New tabs are followed automatically</li>
+            <li className={['recording', 'paused', 'stopped'].includes(runState) ? 'check-done' : ''}>Popups, tabs, dialogs, modals and iframes are followed{session?.openTabs ? ` (${session.openTabs} open tab${session.openTabs > 1 ? 's' : ''})` : ''}</li>
             <li className={runState === 'recording' || runState === 'paused' || runState === 'stopped' ? 'check-done' : ''}>{session?.currentUrl ? `${runState === 'starting' ? 'Opening' : 'Opened'} ${session.currentUrl}` : 'Target URL is opening'}</li>
             <li className={runState === 'stopped' ? 'check-done' : ''}>{session?.eventCount || 0} captured events</li>
-            <li className={runState === 'stopped' ? 'check-done' : ''}>Saved flow ready to replay</li>
+            <li className={runState === 'stopped' ? 'check-done' : ''}>{session?.testSlug ? `Saved to tests/${session.testSlug}` : 'Saved to the test library'}</li>
           </ul>
+          {runState === 'stopped' && session?.testSlug && <button type="button" className="secondary-btn" onClick={() => openInLibrary(session.testSlug)}>Open saved test</button>}
         </aside>
       </div>
 
       {session?.status === 'stopped' && <section className="script-panel">
-        <div className="script-panel-heading"><h2>Replay saved flow</h2><span className="replay-private-note">Generated script is stored privately.</span></div>
+        <div className="script-panel-heading"><h2>Run saved test</h2><span className="replay-private-note">Element names, XPaths and the functional flow are in the test library.</span></div>
         <div className="activity-summary">
-          <h3>Observed activity</h3>
-          <p>{session.eventCount} actions were captured across the browser flow.</p>
-          <ul>{(session.actions || []).map((action, index) => <li key={`${action.action}-${index}`}><strong>{index + 1}. {action.action}</strong> <span>{action.text || action.value || action.pageUrl}</span></li>)}</ul>
+          <h3>Functional flow</h3>
+          <p>{session.actions?.length ?? 0} steps were learned from {session.eventCount} captured events.</p>
+          <ul>{(session.actions || []).map((action, index) => <li key={`${action.action}-${index}`}><strong>{index + 1}. {action.text || action.action}</strong>{action.tab !== undefined && <span className="tab-badge">tab {action.tab}</span>}{action.xpath && <code className="action-xpath">{action.xpath}</code>}</li>)}</ul>
         </div>
-        <div className="replay-controls">
-          <label className="field-label" htmlFor="replay-browser">Browser</label>
-          <select id="replay-browser" className="field" value={browser} onChange={(event) => setBrowser(event.target.value as typeof browser)}>
-            <option value="chromium">Chromium</option>
-            <option value="firefox">Firefox</option>
-            <option value="webkit">WebKit</option>
-          </select>
-          <label className="field-label" htmlFor="replay-data">Test data</label>
-          <textarea id="replay-data" className="field replay-data" rows={3} placeholder="email=user@example.com\nitem=Premium" value={testData} onChange={(event) => setTestData(event.target.value)} />
-          <button type="button" className="run-btn" onClick={replayFlow}>Run flow again</button>
-          {replayStatus && <span className="replay-status">{replayStatus}</span>}
-        </div>
-        {replay && <div className="replay-results"><div className="script-panel-heading"><h3>Replay results</h3>{replay.browserOpen && <button type="button" className="secondary-btn" onClick={closeReplay}>Close replay browser</button>}</div><p>{replay.results.filter((result) => result.status === 'passed').length} passed, {replay.results.filter((result) => result.status === 'failed').length} failed</p><ul>{replay.results.map((result) => <li key={result.index} className={`replay-result-${result.status}`}><strong>{result.index}. {result.action}</strong> {result.status}{result.message ? ` — ${result.message}` : ''}</li>)}</ul></div>}
+        <ReplayRunner start={(browser, data) => uiAutomationClient.replay(session.id, browser, data)} />
       </section>}
+      </>}
     </div>
   )
 }
