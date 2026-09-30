@@ -7,6 +7,9 @@ export default defineConfig(({ mode }) => {
   const apiPort = env.VITE_API_PORT ?? '8000'
   return {
     plugins: [react()],
+    // The tool UIs share frontend/node_modules, so each app keeps its own pre-bundle cache.
+    cacheDir: 'node_modules/.vite/shell',
+    optimizeDeps: { entries: ['index.html'] },
     server: {
       port: 3000,
       proxy: {

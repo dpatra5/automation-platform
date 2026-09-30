@@ -1,9 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  // Relative to this file: the dev server now runs from frontend/.
+  content: {
+    relative: true,
+    files: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  },
   theme: {
     extend: {
       fontFamily: {

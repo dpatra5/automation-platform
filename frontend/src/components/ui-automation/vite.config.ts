@@ -6,6 +6,7 @@ import path from 'path';
 export default defineConfig({
   appType: 'spa',
   plugins: [react()],
+  cacheDir: path.resolve(__dirname, '../../../node_modules/.vite/ui-automation'),
   server: {
     port: 5174,
     strictPort: true,

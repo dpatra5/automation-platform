@@ -2,24 +2,13 @@
   "name": "automation-platform",
   "private": true,
   "version": "0.0.0",
-  "description": "Centralized launcher for the Automation Platform (frontend + all backend services).",
+  "description": "Shortcuts only: dependencies live in frontend/package.json and backend/package.json.",
   "scripts": {
-    "frontend": "concurrently -n shell,load-testing-ui,api-testing-ui,ui-automation-ui -c green,magenta,green,yellow \"npm:frontend:shell\" \"npm:frontend:load-testing\" \"npm:frontend:api-testing\" \"npm:frontend:ui-automation\"",
-    "frontend:shell": "npm --prefix frontend run dev",
-    "frontend:load-testing": "npm --prefix frontend/src/components/load-testing run dev",
-    "frontend:api-testing": "npm --prefix frontend/src/components/api-testing run dev",
-    "frontend:ui-automation": "npm --prefix frontend/src/components/ui-automation run dev",
-    "backend": "concurrently -n sprintguard,load-testing,api-testing,ui-automation,ui-automation-server -c cyan,magenta,green,yellow,blue \"npm:backend:sprintguard\" \"npm:backend:load-testing\" \"npm:backend:api-testing\" \"npm:backend:ui-automation\" \"npm:backend:ui-automation-server\"",
-    "backend:sprintguard": "cross-env API_HOST=127.0.0.1 API_PORT=8000 python -m uvicorn backend.sprintguard.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir backend/sprintguard",
-    "backend:load-testing": "cross-env PYTHONPATH=backend/load-testing/src python -m uvicorn lt.api.app:create_app --factory --host 127.0.0.1 --port 8001 --reload --reload-dir backend/load-testing/src",
-    "backend:api-testing": "cross-env PYTHONPATH=backend/api-testing APIT_PORT=8002 python -m uvicorn apitest.main:create_app --factory --host 127.0.0.1 --port 8002 --reload --reload-dir backend/api-testing/apitest",
-    "backend:ui-automation": "cross-env PYTHONPATH=backend/ui-automation BASE_URL=http://localhost:8003 DASHBOARD_URL=http://localhost:5174 python -m uvicorn app.main:app --host 127.0.0.1 --port 8003 --reload --reload-dir backend/ui-automation/app",
-    "backend:ui-automation-server": "npm --prefix backend/ui-automation-server start",
-    "dev": "concurrently -n backend,frontend -c blue,green \"npm run backend\" \"npm run frontend\"",
-    "install:all": "npm install && npm --prefix frontend install && npm --prefix frontend/src/components/load-testing ci && npm --prefix frontend/src/components/api-testing ci && npm --prefix frontend/src/components/ui-automation ci && npm --prefix backend/ui-automation-server ci && npm --prefix backend/ui-automation-server exec playwright install chromium && python -m pip install -r backend/requirements.txt -r backend/api-testing/requirements.txt -r backend/ui-automation/requirements.txt -e \"backend/load-testing[dev]\" && python -m playwright install chromium"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.0",
-    "cross-env": "^7.0.3"
+    "setup": "cd frontend && npm install && cd ../backend && npm run setup",
+    "dev": "cd backend && npm run dev:all",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "test": "cd backend && npm test"
   }
 }
