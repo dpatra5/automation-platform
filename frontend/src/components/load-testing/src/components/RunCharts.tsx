@@ -44,7 +44,7 @@ interface ChartProps {
   height?: number;
 }
 
-export function ThroughputChart({ data, height = 280 }: ChartProps) {
+export function ThroughputChart({ data, height = 280 }: Readonly<ChartProps>) {
   return (
     <div className="text-slate-500 dark:text-slate-400" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -112,7 +112,7 @@ export function ThroughputChart({ data, height = 280 }: ChartProps) {
   );
 }
 
-export function LatencyChart({ data, height = 280 }: ChartProps) {
+export function LatencyChart({ data, height = 280 }: Readonly<ChartProps>) {
   const withLatency = data.filter((d) => d.p50 !== null || d.p99 !== null);
   return (
     <div className="text-slate-500 dark:text-slate-400" style={{ height }}>
@@ -155,10 +155,12 @@ interface CapacityPoint {
 export function ProfileChart({
   steps,
   height = 160,
-}: {
+  unit = 'rps',
+}: Readonly<{
   steps: ConfigSummary['profile'];
   height?: number;
-}) {
+  unit?: string;
+}>) {
   return (
     <div className="text-slate-500 dark:text-slate-400" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -172,7 +174,10 @@ export function ProfileChart({
             tickFormatter={(v: number) => `${v}s`}
           />
           <YAxis {...axis} width={56} />
-          <Tooltip {...tooltipStyle} formatter={(v) => [`${formatRps(Number(v))} rps`, 'target']} />
+          <Tooltip
+            {...tooltipStyle}
+            formatter={(v) => [`${formatRps(Number(v))} ${unit}`, 'target']}
+          />
           <Area
             type="linear"
             dataKey="rate"
@@ -187,7 +192,10 @@ export function ProfileChart({
   );
 }
 
-export function CapacityChart({ data, height = 240 }: { data: CapacityPoint[]; height?: number }) {
+export function CapacityChart({
+  data,
+  height = 240,
+}: Readonly<{ data: CapacityPoint[]; height?: number }>) {
   return (
     <div className="text-slate-500 dark:text-slate-400" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
