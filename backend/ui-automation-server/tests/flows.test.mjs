@@ -35,8 +35,18 @@ ${hiddenCopy}
   const post = (body) => fetch('/submit', { method: 'POST', body: JSON.stringify(body) });
   document.getElementById('open-help').addEventListener('click', () => window.open('/help', '_blank'));
   document.getElementById('delete').addEventListener('click', () => { if (confirm('Delete item?')) post({ deleted: true }); });
-  document.getElementById('edit').addEventListener('click', () => setTimeout(() => { document.getElementById('edit-modal').hidden = false; }, ${replay ? 400 : 0}));
+  document.getElementById('edit').addEventListener('click', () => setTimeout(() => {
+    document.getElementById('edit-modal').hidden = false;
+    ${replay ? `const cover = document.createElement('div');
+    cover.dataset.cover = '';
+    cover.style.cssText = 'position:fixed;inset:0;z-index:999;background:transparent';
+    document.body.appendChild(cover);` : ''}
+  }, ${replay ? 400 : 0}));
+  ${replay ? `document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !document.getElementById('edit-modal').hidden) { document.getElementById('edit-modal').hidden = true; post({ escaped: true }); }
+  });` : ''}
   document.getElementById('save').addEventListener('click', () => {
+    document.querySelectorAll('[data-cover]').forEach((cover) => cover.remove());
     post({ nickname: document.getElementById('${nicknameId}').value });
     document.getElementById('edit-modal').hidden = true;
   });
@@ -93,7 +103,7 @@ after(async () => {
   await browser?.close()
   controllerProcess?.kill()
   await new Promise((resolve) => fixtureServer?.close(resolve))
-  await fs.rm(dataDirectory, { recursive: true, force: true })
+  await fs.rm(dataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
 })
 
 async function api(pathname, init) {
@@ -219,6 +229,9 @@ test('replay follows the popup, answers the dialog, waits for the modal and acts
   const failures = replay.results.filter((result) => result.status === 'failed').map((result) => `${result.index}. ${result.action}: ${result.message}`)
   assert.deepEqual(failures, [], `replay failures:\n${failures.join('\n')}\n${controllerLog}`)
   assert.deepEqual(submissions, [{ question: 'How do I pay?' }, { deleted: true }, { nickname: 'Neo' }, { card: '4242' }])
+  const save = replay.results.find((result) => result.description?.includes("'Save'"))
+  const clicked = save.assertions.find((item) => item.label === 'Element clicked')
+  assert.match(clicked?.detail ?? '', /modal to settle|clicked it from script/, `covered Save button inside the modal should use the fallback without pressing Escape; got: ${JSON.stringify(save.assertions)}`)
 })
 
 test('a dismissed dialog is replayed as dismissed', async () => {

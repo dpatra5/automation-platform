@@ -12,6 +12,12 @@ export interface UiAutomationSession {
   actions?: Array<{ action: string; pageUrl: string; tab?: number; text?: string; value?: string; xpath?: string }>
 }
 
+export interface SoftAssertion {
+  label: string
+  passed: boolean
+  detail: string
+}
+
 export interface ReplayResult {
   index: number
   action: string
@@ -19,9 +25,20 @@ export interface ReplayResult {
   pageUrl: string
   status: 'passed' | 'failed' | 'skipped'
   message: string
-  checks?: string[]
+  assertions?: SoftAssertion[]
+  notes?: string[]
   locator?: string
   tab?: number
+}
+
+export interface RunSummary {
+  status: 'passed' | 'failed'
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  steps: { total: number; passed: number; failed: number }
+  assertions: { total: number; passed: number; failed: number }
+  failures: Array<{ step: number; description: string; reasons: string[] }>
 }
 
 export interface ReplaySession {
@@ -31,9 +48,14 @@ export interface ReplaySession {
   status: 'running' | 'passed' | 'failed'
   browser: string
   results: ReplayResult[]
+  summary?: RunSummary | null
   browserOpen?: boolean
+  sharedBrowser?: boolean
   healedSteps?: number
 }
+
+export const reportUrl = (replayId: string, format: 'json' | 'html') =>
+  `${CONTROLLER_URL}/api/replays/${encodeURIComponent(replayId)}/report${format === 'html' ? '.html' : ''}`
 
 export type BrowserName = 'chromium' | 'firefox' | 'webkit'
 
@@ -44,6 +66,9 @@ export interface TestRun {
   at: string
   passed: number
   failed: number
+  assertionsPassed?: number
+  assertionsFailed?: number
+  durationMs?: number
   healedSteps: number
 }
 
@@ -120,6 +145,8 @@ export const uiAutomationClient = {
     }),
   replayStatus: (id: string) => request<ReplaySession>(`/api/replays/${id}`),
   closeReplay: (id: string) => request<{ id: string; status: string; browserOpen: boolean }>(`/api/replays/${id}/close`, { method: 'POST' }),
+  openSharedBrowser: (url: string, browser: BrowserName) =>
+    request<{ browser: string; url: string }>('/api/shared-browser/open', { method: 'POST', body: JSON.stringify({ url, browser }) }),
   listTests: () => request<TestSummary[]>('/api/tests'),
   getTest: (slug: string) => request<TestDetail>(`/api/tests/${encodeURIComponent(slug)}`),
   runTest: (slug: string, browser: BrowserName, data: Record<string, string>) =>

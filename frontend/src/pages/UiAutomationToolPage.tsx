@@ -126,7 +126,7 @@ export function UiAutomationToolPage() {
           <p>{session.actions?.length ?? 0} steps were learned from {session.eventCount} captured events.</p>
           <ul>{(session.actions || []).map((action, index) => <li key={`${action.action}-${index}`}><strong>{index + 1}. {action.text || action.action}</strong>{action.tab !== undefined && <span className="tab-badge">tab {action.tab}</span>}{action.xpath && <code className="action-xpath">{action.xpath}</code>}</li>)}</ul>
         </div>
-        <ReplayRunner start={(browser, data) => uiAutomationClient.replay(session.id, browser, data)} />
+        <ReplayRunner start={(browser, data) => uiAutomationClient.replay(session.id, browser, data)} signInUrl={url} />
       </section>}
       </>}
     </div>

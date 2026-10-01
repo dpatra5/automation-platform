@@ -79,7 +79,7 @@ function TestDetailView({ slug, onBack, onChanged }: { slug: string; onBack: () 
 
       <section className="script-panel">
         <div className="script-panel-heading"><h2>Run test</h2><span className="replay-private-note">Runs the functional flow step by step and validates each result; stops at the first failure.</span></div>
-        <ReplayRunner start={(browser, data) => uiAutomationClient.runTest(test.slug, browser, data)} onFinished={() => { load(); onChanged() }} />
+        <ReplayRunner start={(browser, data) => uiAutomationClient.runTest(test.slug, browser, data)} onFinished={() => { load(); onChanged() }} signInUrl={test.url} />
       </section>
 
       <section className="tool-panel test-section">
@@ -108,7 +108,7 @@ function TestDetailView({ slug, onBack, onChanged }: { slug: string; onBack: () 
           <h3>Run history</h3>
           <ul className="run-history">
             {test.history.map((run) => (
-              <li key={run.id}><RunBadge run={run} /> {run.browser} · {formatDate(run.at)}{run.healedSteps ? ` · ${run.healedSteps} XPaths refreshed` : ''}</li>
+              <li key={run.id}><RunBadge run={run} /> {run.browser} · {formatDate(run.at)}{run.assertionsPassed !== undefined ? ` · ${run.assertionsPassed}/${run.assertionsPassed + (run.assertionsFailed ?? 0)} assertions passed` : ''}{run.durationMs ? ` · ${(run.durationMs / 1000).toFixed(1)}s` : ''}{run.healedSteps ? ` · ${run.healedSteps} XPaths refreshed` : ''}</li>
             ))}
           </ul>
         </section>

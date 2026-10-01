@@ -8,10 +8,13 @@ import { xpathEngineScript } from './recorder.mjs'
 import { attachRecorder, createSession, handleControl } from './recording.mjs'
 import { buildRepository, describeRawStep, functionalSteps, isSlug, pageIdentity, slugify } from './repository.mjs'
 import { executeFlow, normalizeUrl } from './executor.mjs'
+import { buildReport, reportHtml } from './report.mjs'
+import { EXPLICIT_WAIT_MS } from './ui-utils.mjs'
+import { closeSharedBrowsers, getSharedContext, seedCookies, sharedBrowserEnabled, sharedBrowserStatus } from './shared-browser.mjs'
 
 const port = Number(process.env.UI_AUTOMATION_PORT || 8004)
 const headless = process.env.UI_AUTOMATION_HEADLESS === 'true'
-const elementTimeoutMs = Number(process.env.UI_AUTOMATION_ELEMENT_TIMEOUT_MS || 15000)
+const elementTimeoutMs = Number(process.env.UI_AUTOMATION_ELEMENT_TIMEOUT_MS || EXPLICIT_WAIT_MS)
 const optionalElementTimeoutMs = Number(process.env.UI_AUTOMATION_OPTIONAL_ELEMENT_TIMEOUT_MS || 3000)
 const sessions = new Map()
 const flows = new Map()
@@ -88,10 +91,12 @@ function recordRun(flow, replay) {
   return queueRepository(async () => {
     const test = await readJson(testFile(flow.testSlug))
     if (!test) return
-    const run = { id: replay.id, status: replay.status, browser: replay.browser, at: new Date().toISOString(), passed: replay.results.filter((result) => result.status === 'passed').length, failed: replay.results.filter((result) => result.status === 'failed').length, healedSteps: replay.healedSteps ?? 0 }
+    const summary = replay.summary || {}
+    const run = { id: replay.id, status: replay.status, browser: replay.browser, at: new Date().toISOString(), passed: summary.steps?.passed ?? 0, failed: summary.steps?.failed ?? 0, assertionsPassed: summary.assertions?.passed ?? 0, assertionsFailed: summary.assertions?.failed ?? 0, durationMs: summary.durationMs ?? 0, healedSteps: replay.healedSteps ?? 0 }
     test.lastRun = run
     test.history = [run, ...(test.history || [])].slice(0, 20)
     await writeJson(testFile(flow.testSlug), test)
+    await writeJson(path.join(testsDirectory, flow.testSlug, 'reports', `${replay.id}.json`), buildReport(replay, flow))
   })
 }
 
@@ -217,29 +222,41 @@ function sessionView(session) {
   return { id: session.id, flowName: session.flowName, testSlug: session.testSlug, status: session.status, eventCount: session.events.length, currentUrl: session.currentUrl, dialogPolicy: session.dialogPolicy, openTabs: [...session.tabs.values()].filter((tab) => !tab.closed).length, actions: actionSummary(session) }
 }
 
-
 function replayView(replay) {
-  return { id: replay.id, flowId: replay.flowId, testSlug: replay.testSlug, status: replay.status, browser: replay.browser, results: replay.results, browserOpen: replay.browserOpen ?? false, healedSteps: replay.healedSteps ?? 0 }
+  return { id: replay.id, flowId: replay.flowId, testSlug: replay.testSlug, status: replay.status, browser: replay.browser, results: replay.results, summary: replay.summary ?? null, browserOpen: replay.browserOpen ?? false, sharedBrowser: replay.sharedBrowser ?? false, healedSteps: replay.healedSteps ?? 0 }
 }
+
+const sharedContext = (name) => getSharedContext(name, { dataDirectory, headless, initScript: xpathEngineScript, executablePath: name === 'chromium' ? chromiumExecutable : undefined })
 
 async function replayFlow(flow, browserName, data, replayId) {
   const replay = replays.get(replayId) || { id: replayId, flowId: flow.id, status: 'running', browser: browserName, results: [], browserProcess: null }
   replays.set(replayId, replay)
-  const browserType = browserFor(browserName)
+  const timeouts = { element: elementTimeoutMs, optional: optionalElementTimeoutMs }
   try {
-    const browser = await browserType.launch({ headless })
-    replay.browserProcess = browser
-    const context = await browser.newContext(flow.storageState ? { storageState: flow.storageState } : {})
-    await context.addInitScript({ content: xpathEngineScript })
-    const { healedSteps } = await executeFlow(context, flow, data, replay, { element: elementTimeoutMs, optional: optionalElementTimeoutMs })
-    if (healedSteps) await saveFlow(flow)
-    replay.healedSteps = healedSteps
-    replay.status = replay.results.every((result) => result.status === 'passed') ? 'passed' : 'failed'
-    replay.browserOpen = true
+    let outcome
+    if (sharedBrowserEnabled()) {
+      const context = await sharedContext(browserName)
+      await seedCookies(context, flow.storageState)
+      replay.sharedBrowser = true
+      outcome = await executeFlow(context, flow, data, replay, timeouts, { shared: true })
+    } else {
+      const browser = await browserFor(browserName).launch({ headless })
+      replay.browserProcess = browser
+      const context = await browser.newContext(flow.storageState ? { storageState: flow.storageState } : {})
+      await context.addInitScript({ content: xpathEngineScript })
+      outcome = await executeFlow(context, flow, data, replay, timeouts)
+    }
+    if (outcome.healedSteps) await saveFlow(flow)
+    replay.healedSteps = outcome.healedSteps
+    replay.summary = outcome.summary
+    replay.status = outcome.summary.status
+    replay.browserOpen = !replay.sharedBrowser
   } catch (error) {
     replay.status = 'failed'
-    replay.results.push({ index: 0, action: 'browser-start', pageUrl: flow.url, status: 'failed', message: error.message })
+    replay.results.push({ index: 0, action: 'browser-start', pageUrl: flow.url, status: 'failed', message: error.message, assertions: [{ label: 'Browser started', passed: false, detail: error.message }] })
   }
+  replay.flowName = flow.flowName
+  replay.flowUrl = flow.url
   await recordRun(flow, replay).catch(() => {})
   return replay
 }
@@ -334,6 +351,17 @@ async function route(req, res) {
     return json(res, 202, await startReplay(flow, await readBody(req)))
   }
   if (req.method === 'GET' && url.pathname === '/api/tests') return json(res, 200, await listTests())
+  if (req.method === 'GET' && url.pathname === '/api/shared-browser') return json(res, 200, { enabled: sharedBrowserEnabled(), browsers: await sharedBrowserStatus() })
+  if (req.method === 'POST' && url.pathname === '/api/shared-browser/open') {
+    if (!sharedBrowserEnabled()) return json(res, 409, { error: 'The shared test browser is turned off (UI_AUTOMATION_SHARED_BROWSER=false).' })
+    const body = await readBody(req)
+    const name = ['chromium', 'firefox', 'webkit'].includes(body.browser) ? body.browser : 'chromium'
+    const context = await sharedContext(name)
+    const page = await context.newPage()
+    await page.bringToFront().catch(() => {})
+    if (body.url) await page.goto(normalizeUrl(body.url), { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {})
+    return json(res, 200, { browser: name, url: page.url() })
+  }
   if (req.method === 'GET' && url.pathname === '/api/pages') return json(res, 200, await listPages())
   const testMatch = url.pathname.match(/^\/api\/tests\/([^/]+)(\/replay)?$/)
   if (testMatch) {
@@ -352,6 +380,20 @@ async function route(req, res) {
     const replay = replays.get(replayStatusMatch[1])
     return replay ? json(res, 200, replayView(replay)) : json(res, 404, { error: 'Replay not found' })
   }
+  const reportMatch = url.pathname.match(/^\/api\/replays\/([^/]+)\/report(\.html)?$/)
+  if (req.method === 'GET' && reportMatch) {
+    const replay = replays.get(reportMatch[1])
+    if (!replay) return json(res, 404, { error: 'Replay not found' })
+    if (replay.status === 'running') return json(res, 409, { error: 'The run is still in progress' })
+    const report = buildReport(replay, { flowName: replay.flowName, testSlug: replay.testSlug, url: replay.flowUrl })
+    const name = `${replay.testSlug || 'ui-test'}-${replay.id.slice(0, 8)}`
+    if (reportMatch[2]) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'access-control-allow-origin': '*', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'" })
+      return res.end(reportHtml(report))
+    }
+    res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'content-disposition': `attachment; filename="${name}-report.json"` })
+    return res.end(JSON.stringify(report, null, 2))
+  }
   const replayCloseMatch = url.pathname.match(/^\/api\/replays\/([^/]+)\/close$/)
   if (req.method === 'POST' && replayCloseMatch) {
     const replay = replays.get(replayCloseMatch[1])
@@ -365,3 +407,11 @@ async function route(req, res) {
 }
 
 server.listen(port, '127.0.0.1', () => console.log(`UI Automation Playwright controller listening on http://127.0.0.1:${port}`))
+
+// Close the test browsers on Ctrl+C so their profiles (and sign-ins) are written to disk.
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.once(signal, () => {
+    server.close()
+    closeSharedBrowsers().finally(() => process.exit(0))
+  })
+}

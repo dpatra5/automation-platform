@@ -330,7 +330,7 @@
 .replay-controls {
   margin: 18px 0;
   display: grid;
-  grid-template-columns: auto minmax(130px, 180px) 1fr auto;
+  grid-template-columns: auto minmax(130px, 180px) 1fr auto auto;
   align-items: end;
   gap: 10px;
 }
@@ -417,6 +417,82 @@
 
 .replay-result-skipped {
   color: #8b93ad;
+}
+
+.run-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+
+.run-summary-card {
+  min-width: 120px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #232a45;
+  color: #dfe4f2;
+  font-size: 12px;
+}
+
+.run-summary-card b {
+  display: block;
+  margin-top: 2px;
+  font-size: 18px;
+  color: #fff;
+}
+
+.run-summary-passed b {
+  color: #73e2a6;
+}
+
+.run-summary-failed b {
+  color: #ff9ba5;
+}
+
+.run-failures {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid #5c2a35;
+  border-radius: 10px;
+  color: #ffc7ce;
+  font-size: 13px;
+}
+
+.run-failures h4 {
+  margin: 0 0 6px;
+  color: #ff9ba5;
+}
+
+.run-failures ul ul,
+.soft-assertions {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  list-style: none;
+}
+
+.soft-assertions {
+  display: grid;
+  gap: 2px;
+  font-size: 12.5px;
+}
+
+.assertion-pass {
+  color: #73e2a6;
+}
+
+.assertion-fail {
+  color: #ff9ba5;
+}
+
+.assertion-note {
+  color: #aeb7cf;
+}
+
+.replay-results .tool-actions a.secondary-btn {
+  padding: 7px 12px;
+  font-size: 13px;
+  text-decoration: none;
 }
 
 .ui-tool-tabs {

@@ -154,7 +154,7 @@ after(async () => {
   await browser?.close()
   controllerProcess?.kill()
   await new Promise((resolve) => fixtureServer?.close(resolve))
-  await fs.rm(dataDirectory, { recursive: true, force: true })
+  await fs.rm(dataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
 })
 
 test('every element on the page gets a unique relative XPath', async () => {
